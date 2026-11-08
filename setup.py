@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Montador pontual do Wired Paradise. Usa a API oficial do Discord."""
+"""Configuração explícita, idempotente e auditável do WiredParadise via Discord API v10."""
 import hashlib
 import hmac
 import json
@@ -11,26 +11,47 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 BASE = "https://discord.com/api/v10"
-# Fingerprint para evitar executar em outro servidor sem publicar seu ID em texto claro.
-# Isto não é um segredo nem criptografia: a proteção do token está no GitHub Secrets.
+# Identificador de servidor por fingerprint (não é criptografia, nem credencial).
 AUTHORIZED_GUILD_SHA256 = "cf1a67632a67f690daacb0e2b2c11c7156d8f59d6dc27bb85c5d1114e58ad02e"
+
 INVITE = 1 << 0
+ADMIN = 1 << 3
 VIEW = 1 << 10
 SEND = 1 << 11
+MANAGE_MESSAGES = 1 << 13
+EMBED = 1 << 14
+ATTACH = 1 << 15
+HISTORY = 1 << 16
 MENTION_ALL = 1 << 17
+MODERATE_MEMBERS = 1 << 40
+
+# (nome, tipo Discord, tópico, modo lento em segundos, política)
 CHANNELS = {
     "COMUNIDADE": [
-        ("chat-geral", 0, "Conversa geral da comunidade.", 5, False),
-        ("midias", 0, "Imagens, vídeos e edits.", 10, False),
-        ("spam", 0, "Conversa livre, sem golpes nem ataques.", 2, False),
+        ("anuncios", 0, "Avisos oficiais: somente o dono publica.", 0, "owner"),
+        ("chat-geral", 0, "Converse por texto. Anexos e prévias de links desativados.", 5, "chat"),
+        ("midias", 0, "Imagens, vídeos, arquivos e conversa liberados.", 2, "media"),
+        ("spam", 0, "Conversa livre. Mensagem contendo apenas um ponto será bloqueada pelo AutoMod.", 2, "spam"),
+        ("cargos", 0, "Informações dos cargos; somente o dono publica.", 0, "owner"),
     ],
     "MEUS PROJETOS": [
-        ("meus-scripts", 0, "Scripts publicados pela equipe.", 0, True),
-        ("metodos-de-qualidade", 0, "Métodos e tutoriais da equipe.", 0, True),
+        ("meus-scripts", 0, "Scripts oficiais: somente o dono publica.", 0, "owner"),
+        ("metodos-de-qualidade", 0, "Métodos oficiais: somente o dono publica.", 0, "owner"),
     ],
-    "VOZ": [("Call Geral", 2, None, 0, False)],
-    "SEGURANÇA": [("logs-de-seguranca", 0, "Alertas do AutoMod.", 0, False)],
+    "VOZ": [("Call Geral", 2, None, 0, "voice")],
+    "SEGURANÇA": [
+        ("logs-de-seguranca", 0, "Alertas automáticos do Discord; visível para dono e moderação.", 0, "logs")
+    ],
 }
+
+# Cargos sem ADMINISTRADOR. A conta proprietária já tem privilégios inerentes.
+ROLE_SPECS = (
+    ("👑 Dono", 0xED4245, 0, True),
+    ("Moderação", 0x3498DB, MANAGE_MESSAGES | MODERATE_MEMBERS, True),
+    ("Membro", 0xFFFFFF, 0, False),
+    ("Cargo Boost", 0xFF73FA, 0, True),
+    ("Sigma 67", 0x9B59B6, 0, True),
+)
 
 
 class DiscordError(Exception):
@@ -43,143 +64,337 @@ class API:
 
     def call(self, method, path, body=None):
         payload = json.dumps(body, ensure_ascii=False).encode() if body is not None else None
-        url = BASE + path
         headers = {
             "Authorization": "Bot " + self.token,
-            "User-Agent": "WiredParadiseSetup/1.0",
+            "User-Agent": "WiredParadiseSetup/2.0",
             "Content-Type": "application/json",
-            "X-Audit-Log-Reason": quote("Configuração autorizada Wired Paradise"),
+            "X-Audit-Log-Reason": quote("Configuração autorizada WiredParadise"),
         }
         for attempt in range(5):
-            req = Request(url, data=payload, method=method, headers=headers)
+            request = Request(BASE + path, data=payload, method=method, headers=headers)
             try:
-                with urlopen(req, timeout=25) as res:
-                    raw = res.read().decode("utf-8")
+                with urlopen(request, timeout=25) as response:
+                    raw = response.read().decode("utf-8")
                     return json.loads(raw) if raw else {}
-            except HTTPError as err:
-                body_text = err.read().decode("utf-8", errors="replace")
+            except HTTPError as error:
+                raw_error = error.read().decode("utf-8", errors="replace")
                 try:
-                    data = json.loads(body_text)
+                    info = json.loads(raw_error)
                 except ValueError:
-                    data = {}
-                if err.code == 429 and attempt < 4:
-                    time.sleep(min(15, max(1, float(data.get("retry_after", 1)))))
+                    info = {}
+                if error.code == 429 and attempt < 4:
+                    time.sleep(min(15, max(1, float(info.get("retry_after", 1)))))
                     continue
-                if err.code >= 500 and attempt < 4:
+                if error.code >= 500 and attempt < 4:
                     time.sleep(attempt + 1)
                     continue
-                raise DiscordError("Discord HTTP %d: %s" % (err.code, str(data.get("message", "Falha de API"))[:160])) from None
+                raise DiscordError(
+                    "Discord HTTP %s: %s" % (error.code, str(info.get("message", "Erro de API"))[:160])
+                ) from None
             except URLError:
                 if attempt < 4:
                     time.sleep(attempt + 1)
                     continue
-                raise DiscordError("Sem conexão com Discord") from None
+                raise DiscordError("Sem conexão com a API do Discord") from None
         raise DiscordError("Discord indisponível")
 
 
 def find_channel(channels, name, kind, parent=None):
-    for c in channels:
-        if c.get("name") == name and c.get("type") == kind:
-            if parent is None or c.get("parent_id") == parent:
-                return c
-    return None
+    return next(
+        (c for c in channels if c.get("name") == name and c.get("type") == kind
+         and (parent is None or c.get("parent_id") == parent)),
+        None,
+    )
 
 
-def overwrites(existing, guild_id, category, readonly=False):
-    """Preserva outros cargos e permissões existentes; apenas adiciona bloqueios."""
-    all_overwrites = [dict(p) for p in existing or []]
-    everyone = next((p for p in all_overwrites if p["id"] == guild_id and p["type"] == 0), None)
-    if everyone is None:
-        everyone = {"id": guild_id, "type": 0, "allow": "0", "deny": "0"}
-        all_overwrites.append(everyone)
+def set_overwrite(overwrites_list, target_id, target_type, allow=0, deny=0, enforce_exclusive=0):
+    item = next(
+        (p for p in overwrites_list if str(p.get("id")) == str(target_id)
+         and p.get("type") == target_type),
+        None,
+    )
+    if item is None:
+        item = {"id": str(target_id), "type": target_type, "allow": "0", "deny": "0"}
+        overwrites_list.append(item)
+    old_allow = int(item.get("allow", 0))
+    old_deny = int(item.get("deny", 0))
+    item["allow"] = str((old_allow & ~deny) | allow)
+    item["deny"] = str((old_deny & ~allow) | deny)
+    if enforce_exclusive:
+        item["allow"] = str(int(item["allow"]) & ~enforce_exclusive)
+    return item
+
+
+def overwrites(existing, guild_id, policy, owner_id=None, moderator_id=None):
+    """Garante política do canal sem apagar outras permissões não relacionadas."""
+    result = [dict(p) for p in (existing or [])]
     deny = INVITE | MENTION_ALL
-    if category == "SEGURANÇA":
-        deny |= VIEW
-    if readonly:
+    allow = 0
+    if policy == "owner":
         deny |= SEND
-    everyone["deny"] = str(int(everyone.get("deny", 0)) | deny)
-    everyone["allow"] = str(int(everyone.get("allow", 0)) & ~deny)
-    return all_overwrites
+    elif policy in ("chat", "media", "spam"):
+        allow |= SEND
+    if policy == "chat":
+        deny |= ATTACH | EMBED
+    elif policy == "media":
+        allow |= ATTACH | EMBED
+    elif policy == "logs":
+        deny |= VIEW
+    set_overwrite(result, guild_id, 0, allow=allow, deny=deny)
+
+    # Não deixar outros cargos concederem escrita em canais exclusivos,
+    # nem anexos em chat ou VISUALIZAR em logs privados.
+    exclusive = SEND if policy == "owner" else (ATTACH | EMBED if policy == "chat" else (VIEW if policy == "logs" else 0))
+    if exclusive:
+        for overwrite in result:
+            if overwrite.get("type") == 0 and str(overwrite.get("id")) != str(guild_id):
+                overwrite["allow"] = str(int(overwrite.get("allow", 0)) & ~exclusive)
+
+    if owner_id and policy in ("owner", "logs"):
+        owner_access = SEND | VIEW | HISTORY if policy == "owner" else VIEW | HISTORY
+        set_overwrite(result, owner_id, 1, allow=owner_access)
+    if moderator_id and policy == "logs":
+        set_overwrite(result, moderator_id, 0, allow=VIEW | HISTORY)
+    return result
+
+
+def role_spec(name):
+    return next((r for r in ROLE_SPECS if r[0] == name), None)
+
+
+def ensure_roles(api, guild_id, guild, problems):
+    roles = api.call("GET", "/guilds/" + guild_id + "/roles")
+    found = {}
+    native_booster = next((r for r in roles if "premium_subscriber" in r.get("tags", {})), None)
+    for name, color, perms, hoist in ROLE_SPECS:
+        if name == "Cargo Boost" and native_booster:
+            found[name] = native_booster
+            print("Cargo de Booster nativo identificado: atribuição automática do Discord.")
+            continue
+        role = next((r for r in roles if r.get("name") == name), None)
+        if role is None:
+            spec = {
+                "name": name,
+                "color": color,
+                "permissions": str(perms),
+                "hoist": hoist,
+                "mentionable": False,
+            }
+            if name == "👑 Dono" and "ROLE_ICONS" in guild.get("features", []):
+                spec["unicode_emoji"] = "👑"
+            try:
+                role = api.call("POST", "/guilds/" + guild_id + "/roles", spec)
+                roles.append(role)
+                print("Cargo criado:", name)
+            except DiscordError as error:
+                problems.append("Criar cargo " + name + ": " + str(error))
+                continue
+        elif role.get("managed"):
+            problems.append("Cargo não editável com nome reservado: " + name)
+            continue
+        else:
+            patch = {}
+            if int(role.get("color", 0)) != color:
+                patch["color"] = color
+            if bool(role.get("hoist", False)) != hoist:
+                patch["hoist"] = hoist
+            if bool(role.get("mentionable", False)):
+                patch["mentionable"] = False
+            # Não aumentamos permissões de um cargo antigo automaticamente.
+            if patch:
+                try:
+                    api.call("PATCH", "/guilds/" + guild_id + "/roles/" + role["id"], patch)
+                    role.update(patch)
+                except DiscordError as error:
+                    problems.append("Atualizar cargo " + name + ": " + str(error))
+            print("Cargo existente:", name)
+        if int(role.get("permissions", 0)) & ADMIN:
+            problems.append("ATENÇÃO: cargo existente com ADMINISTRADOR: " + name)
+        found[name] = role
+
+    owner_id = guild.get("owner_id")
+    if not owner_id:
+        problems.append("Servidor não informou ID do proprietário; cargos exclusivos não atribuídos.")
+        return found
+    for name in ("👑 Dono", "Sigma 67"):
+        if name not in found:
+            continue
+        try:
+            api.call("PUT", "/guilds/" + guild_id + "/members/" + owner_id + "/roles/" + found[name]["id"])
+            print("Cargo exclusivo atribuído ao proprietário:", name)
+        except DiscordError as error:
+            problems.append("Atribuir " + name + " ao proprietário: " + str(error))
+    if native_booster is None:
+        print("AVISO: Cargo Boost personalizado criado; atribuição automática a boosters exige bot online ou automação separada.")
+    return found
 
 
 def automod(name, trigger_type, log_id):
     spec = {
-        "name": name, "event_type": 1, "trigger_type": trigger_type, "enabled": True,
-        "actions": [
-            {"type": 1, "metadata": {"custom_message": "Mensagem bloqueada pela segurança do Wired Paradise."}},
-            {"type": 2, "metadata": {"channel_id": log_id}},
-        ],
+        "name": name,
+        "event_type": 1,
+        "trigger_type": trigger_type,
+        "enabled": True,
+        "actions": [{"type": 1, "metadata": {
+            "custom_message": "Mensagem bloqueada pela segurança do WiredParadise."
+        }}],
     }
+    if log_id:
+        spec["actions"].append({"type": 2, "metadata": {"channel_id": log_id}})
     if trigger_type == 5:
-        spec["trigger_metadata"] = {"mention_total_limit": 5, "mention_raid_protection_enabled": True}
+        spec["trigger_metadata"] = {
+            "mention_total_limit": 5, "mention_raid_protection_enabled": True
+        }
         spec["actions"].append({"type": 3, "metadata": {"duration_seconds": 120}})
     return spec
 
 
+def dot_rule(log_id, channels, spam_id):
+    """AutoMod nativo impede mensagem exatamente '.', NÃO bane usuário."""
+    exempt = [
+        c["id"] for c in channels if c.get("type") in (0, 5, 11, 12, 15, 16)
+        and c.get("id") != spam_id
+    ]
+    if len(exempt) > 50:
+        raise ValueError("Há canais demais para limitar o filtro ao spam com segurança")
+    rule = automod("WP | Ponto no spam", 1, log_id)
+    rule["trigger_metadata"] = {"regex_patterns": [r"^\.$"]}
+    rule["exempt_channels"] = exempt
+    rule["actions"].append({"type": 3, "metadata": {"duration_seconds": 60}})
+    return rule
 
-def audit_server(api, guild, guild_id):
-    """Auditoria apenas GET: nenhuma alteração no Discord."""
+
+def apply_automod(api, guild_id, channels, problems):
+    log = next((c for c in channels if c.get("name") == "logs-de-seguranca" and c.get("type") == 0), None)
+    spam = next((c for c in channels if c.get("name") == "spam" and c.get("type") == 0
+                 and any(p.get("name") == "COMUNIDADE" and c.get("parent_id") == p["id"] for p in channels)), None)
+    try:
+        rules = api.call("GET", "/guilds/" + guild_id + "/auto-moderation/rules")
+    except DiscordError as error:
+        problems.append("Ler regras AutoMod: " + str(error))
+        return
+    specs = [
+        automod("WP | Anti-spam", 3, log["id"] if log else None),
+        automod("WP | Anti-raid de menções", 5, log["id"] if log else None),
+    ]
+    if spam:
+        try:
+            specs.append(dot_rule(log["id"] if log else None, channels, spam["id"]))
+        except ValueError as error:
+            problems.append("Filtro de ponto: " + str(error))
+    else:
+        problems.append("Filtro de ponto: canal spam não encontrado")
+    for spec in specs:
+        existing = next((r for r in rules if r.get("name") == spec["name"]), None)
+        trigger = spec["trigger_type"]
+        if existing is None and trigger in (3, 5) and any(r.get("trigger_type") == trigger for r in rules):
+            print("AutoMod nativo do mesmo tipo já existe; mantido:", spec["name"])
+            continue
+        try:
+            if existing is None:
+                api.call("POST", "/guilds/" + guild_id + "/auto-moderation/rules", spec)
+            else:
+                update = dict(spec)
+                update.pop("trigger_type", None)
+                api.call("PATCH", "/guilds/" + guild_id + "/auto-moderation/rules/" + existing["id"], update)
+            print("AutoMod confirmado:", spec["name"])
+        except DiscordError as error:
+            problems.append("AutoMod " + spec["name"] + ": " + str(error))
+
+
+def post_role_guide(api, channel_id, boost_native, problems):
+    lines = [
+        "**CARGOS DO WIREDPARADISE**",
+        "👑 **Dono** — vermelho, exclusivo do proprietário.",
+        "🔵 **Moderação** — azul, gerencia mensagens e pode aplicar timeout.",
+        "⚪ **Membro** — branco, cargo comum.",
+        "💗 **Cargo Boost** — para quem impulsiona o servidor.",
+        "🟣 **Sigma 67** — exclusivo do dono.",
+        "",
+        "Os cargos Membro e Moderação são atribuídos pela equipe, não por esta mensagem.",
+    ]
+    if not boost_native:
+        lines.append("O Cargo Boost personalizado ainda precisa de atribuição pela equipe.")
+    try:
+        api.call("POST", "/channels/" + channel_id + "/messages", {"content": "\n".join(lines),
+                                                                 "allowed_mentions": {"parse": []}})
+        print("Guia publicado uma única vez no canal cargos.")
+    except DiscordError as error:
+        problems.append("Publicar guia de cargos: " + str(error))
+
+
+def validate_server(api, guild, guild_id):
+    """GET somente: checagem da configuração sem modificar o servidor."""
     problems = []
     channels = api.call("GET", "/guilds/" + guild_id + "/channels")
     roles = api.call("GET", "/guilds/" + guild_id + "/roles")
     rules = api.call("GET", "/guilds/" + guild_id + "/auto-moderation/rules")
-    print("AUDITORIA SOMENTE LEITURA — nenhuma configuração será alterada.")
-
+    owner_id = guild.get("owner_id")
+    mods = next((r for r in roles if r.get("name") == "Moderação"), None)
+    role_names = {r.get("name") for r in roles}
+    if "premium_subscriber" in {tag for r in roles for tag in r.get("tags", {})}:
+        role_names.add("Cargo Boost")
+    for role, _, _, _ in ROLE_SPECS:
+        if role not in role_names:
+            problems.append("Cargo ausente: " + role)
+        else:
+            print("OK cargo:", role)
+    print("AUDITORIA SOMENTE LEITURA — não altera membros nem canais.")
     for category, specs in CHANNELS.items():
         cat = find_channel(channels, category, 4)
         if not cat:
             problems.append("Categoria ausente: " + category)
             continue
         print("OK categoria:", category)
-        for name, typ, _, slow, readonly in specs:
+        for name, typ, _, slow, policy in specs:
             ch = find_channel(channels, name, typ, cat["id"])
             if not ch:
                 problems.append("Canal ausente: " + name)
                 continue
-            print("OK canal:", name)
-            expected_deny = INVITE | MENTION_ALL
-            if category == "SEGURANÇA":
-                expected_deny |= VIEW
-            if readonly:
-                expected_deny |= SEND
-            everyone = next((o for o in ch.get("permission_overwrites", []) if o.get("id") == guild_id and o.get("type") == 0), None)
-            denied = int(everyone.get("deny", 0)) if everyone else 0
-            allowed = int(everyone.get("allow", 0)) if everyone else 0
-            if (denied & expected_deny) != expected_deny or (allowed & expected_deny):
-                problems.append("Permissões @everyone insuficientes no canal: " + name)
+            expected = overwrites([], guild_id, policy, owner_id,
+                                  mods["id"] if mods else None)
+            current = ch.get("permission_overwrites") or []
+            for exp in expected:
+                actual = next((p for p in current if str(p["id"]) == str(exp["id"])
+                               and p["type"] == exp["type"]), None)
+                if not actual or int(actual.get("allow", 0)) & int(exp["allow"]) != int(exp["allow"]) or (
+                    int(actual.get("deny", 0)) & int(exp["deny"]) != int(exp["deny"])
+                ):
+                    problems.append("Permissões não conferem: " + name)
+                    break
             if typ == 0 and int(ch.get("rate_limit_per_user", 0)) < slow:
-                problems.append("Slowmode abaixo do esperado: " + name)
-
-    everyone_role = next((r for r in roles if r.get("id") == guild_id), None)
-    if not everyone_role:
-        problems.append("Cargo @everyone não encontrado")
-    elif int(everyone_role.get("permissions", 0)) & (INVITE | MENTION_ALL):
-        problems.append("Cargo @everyone permite convites ou menções globais")
-    else:
-        print("OK cargo @everyone: convites e menções globais limitados")
-
+                problems.append("Slowmode insuficiente: " + name)
+            print("OK canal encontrado:", name)
+    base_role = next((r for r in roles if r.get("id") == guild_id), None)
+    if not base_role or int(base_role.get("permissions", 0)) & (INVITE | MENTION_ALL):
+        problems.append("@everyone ainda pode convidar ou mencionar globalmente")
     if guild.get("verification_level", 0) < 3:
-        problems.append("Verificação do servidor abaixo de Alta")
-    else:
-        print("OK verificação do servidor")
+        problems.append("Verificação abaixo de Alta")
     if guild.get("explicit_content_filter", 0) < 2:
-        problems.append("Filtro de mídia abaixo do esperado")
+        problems.append("Filtro de mídia insuficiente")
+    dot = next((r for r in rules if r.get("name") == "WP | Ponto no spam"), None)
+    spam = next((c for c in channels if c.get("name") == "spam" and c.get("type") == 0), None)
+    if not dot or not dot.get("enabled") or dot.get("trigger_type") != 1 or (
+        not dot.get("trigger_metadata", {}).get("regex_patterns")
+    ):
+        problems.append("Filtro do ponto no spam não está ativo")
+    elif not spam:
+        problems.append("Canal spam ausente para o filtro do ponto")
+    elif spam["id"] in dot.get("exempt_channels", []):
+        problems.append("Canal spam foi isentado acidentalmente do filtro do ponto")
     else:
-        print("OK filtro de mídia")
-
+        print("OK AutoMod: ponto isolado bloqueado no spam; banimento NÃO configurado")
     for name in ("WP | Anti-spam", "WP | Anti-raid de menções"):
-        rule = next((r for r in rules if r.get("name") == name), None)
-        if not rule or not rule.get("enabled"):
-            problems.append("Regra AutoMod ausente ou desativada: " + name)
+        if not any(r.get("name") == name and r.get("enabled") for r in rules):
+            problems.append("AutoMod ausente/inativo: " + name)
         else:
             print("OK AutoMod:", name)
-
     if problems:
         for p in problems:
             print("ATENÇÃO:", p)
-        sys.exit("Auditoria encontrou " + str(len(problems)) + " pendência(s)")
-    print("AUDITORIA APROVADA — configurações esperadas encontradas.")
-    print("Nota: permissões efetivas de outros cargos e proteção real contra ataques exigem revisão adicional.")
+        raise DiscordError("Auditoria: " + str(len(problems)) + " pendência(s)")
+    print("AUDITORIA APROVADA: estrutura e configurações encontradas.")
+    print("IMPORTANTE: teste com conta comum; administradores não reproduzem permissões de membros.")
 
 
 def main():
@@ -192,83 +407,97 @@ def main():
     if mode == "apply" and confirm != "APLICAR":
         sys.exit("Falta confirmação APLICAR; nada foi alterado")
     if not token or not guild_id.isascii() or not guild_id.isdecimal():
-        sys.exit("Cadastre DISCORD_BOT_TOKEN e DISCORD_GUILD_ID em GitHub Actions Secrets")
+        sys.exit("Secrets DISCORD_BOT_TOKEN e DISCORD_GUILD_ID ausentes ou inválidos")
+    if not hmac.compare_digest(hashlib.sha256(guild_id.encode("ascii")).hexdigest(),
+                               AUTHORIZED_GUILD_SHA256):
+        sys.exit("ID diferente do servidor autorizado; operação cancelada")
+
     api = API(token)
-    # Confere o identificador autorizado sem imprimi-lo em logs ou no código.
-    if not hmac.compare_digest(hashlib.sha256(guild_id.encode("ascii")).hexdigest(), AUTHORIZED_GUILD_SHA256):
-        sys.exit("ID diferente do Wired Paradise autorizado; operação cancelada")
     guild = api.call("GET", "/guilds/" + guild_id)
-    print("Servidor autorizado confirmado (identificador oculto nos logs).")
+    print("Servidor autorizado confirmado (ID não exibido).")
     if mode == "audit":
-        audit_server(api, guild, guild_id)
+        validate_server(api, guild, guild_id)
         return
     channels = api.call("GET", "/guilds/" + guild_id + "/channels")
     if mode == "preview":
-        print("PRÉVIA — NENHUMA ALTERAÇÃO NO DISCORD")
+        print("PRÉVIA: nenhuma alteração no Discord.")
+        roles = api.call("GET", "/guilds/" + guild_id + "/roles")
+        for name, _, _, _ in ROLE_SPECS:
+            print("Cargo", "EXISTE" if any(r.get("name") == name for r in roles) else "CRIAR", name)
         for category, specs in CHANNELS.items():
-            existing = find_channel(channels, category, 4)
-            print(("EXISTE" if existing else "CRIAR") + " categoria " + category)
-            for name, typ, _, _, readonly in specs:
-                found = find_channel(channels, name, typ, existing["id"]) if existing else None
-                print(" ", "EXISTE" if found else "CRIAR", name,
-                      "(somente equipe publica)" if readonly else "")
-        print("Também: restrições @everyone, verificação Alta, filtro de mídia, AutoMod anti-spam e menções.")
-        print("Para executar: apply + APLICAR")
+            cat = find_channel(channels, category, 4)
+            print("Categoria", "EXISTE" if cat else "CRIAR", category)
+            for name, typ, _, _, policy in specs:
+                ch = find_channel(channels, name, typ, cat["id"]) if cat else None
+                print(" Canal", "EXISTE/CONFERIR" if ch else "CRIAR", name, "[" + policy + "]")
+        print("Inclui permissões, atribuição de Dono e Sigma 67 ao proprietário e filtro do ponto no spam.")
+        print("Ban instantâneo por ponto exige bot permanentemente online; não é feito pelo AutoMod.")
         return
 
     problems = []
-    log_id = None
+    roles = ensure_roles(api, guild_id, guild, problems)
+    owner_id = guild.get("owner_id")
+    moderator_id = roles.get("Moderação", {}).get("id")
+    post_guide_id = None
     for category, specs in CHANNELS.items():
         cat = find_channel(channels, category, 4)
-        if cat is None:
+        kind = "logs" if category == "SEGURANÇA" else "category"
+        cat_ow = overwrites(cat.get("permission_overwrites", []) if cat else [],
+                            guild_id, kind, owner_id, moderator_id)
+        if not cat:
             cat = api.call("POST", "/guilds/" + guild_id + "/channels", {
-                "name": category, "type": 4, "permission_overwrites": overwrites([], guild_id, category)
+                "name": category, "type": 4, "permission_overwrites": cat_ow
             })
             channels.append(cat)
             print("Categoria criada:", category)
         else:
-            new_permissions = overwrites(cat.get("permission_overwrites"), guild_id, category)
-            if new_permissions != cat.get("permission_overwrites"):
-                api.call("PATCH", "/channels/" + cat["id"], {"permission_overwrites": new_permissions})
-                cat["permission_overwrites"] = new_permissions
-            print("Categoria existente:", category)
-        for name, typ, topic, slow, readonly in specs:
+            if cat_ow != cat.get("permission_overwrites", []):
+                api.call("PATCH", "/channels/" + cat["id"], {"permission_overwrites": cat_ow})
+                cat["permission_overwrites"] = cat_ow
+            print("Categoria conferida:", category)
+        for name, typ, topic, slow, policy in specs:
             ch = find_channel(channels, name, typ, cat["id"])
-            if ch is None:
-                data = {
-                    "name": name, "type": typ, "parent_id": cat["id"],
-                    "permission_overwrites": overwrites([], guild_id, category, readonly)
-                }
+            target_ow = overwrites(ch.get("permission_overwrites", []) if ch else [],
+                                   guild_id, policy, owner_id, moderator_id)
+            if not ch:
+                payload = {"name": name, "type": typ, "parent_id": cat["id"],
+                           "permission_overwrites": target_ow}
                 if typ == 0:
-                    data.update({"topic": topic, "rate_limit_per_user": slow})
-                ch = api.call("POST", "/guilds/" + guild_id + "/channels", data)
+                    payload.update({"topic": topic, "rate_limit_per_user": slow})
+                ch = api.call("POST", "/guilds/" + guild_id + "/channels", payload)
                 channels.append(ch)
                 print("Canal criado:", name)
+                if name == "cargos":
+                    post_guide_id = ch["id"]
             else:
                 patch = {}
-                ow = overwrites(ch.get("permission_overwrites"), guild_id, category, readonly)
-                if ow != ch.get("permission_overwrites"):
-                    patch["permission_overwrites"] = ow
-                if typ == 0 and int(ch.get("rate_limit_per_user", 0)) < slow:
-                    patch["rate_limit_per_user"] = slow
+                if target_ow != ch.get("permission_overwrites", []):
+                    patch["permission_overwrites"] = target_ow
+                if typ == 0:
+                    if int(ch.get("rate_limit_per_user", 0)) < slow:
+                        patch["rate_limit_per_user"] = slow
+                    if ch.get("topic") != topic:
+                        patch["topic"] = topic
                 if patch:
                     api.call("PATCH", "/channels/" + ch["id"], patch)
                     ch.update(patch)
-                print("Canal existente:", name)
-            if name == "logs-de-seguranca":
-                log_id = ch["id"]
+                print("Canal conferido:", name)
+    if post_guide_id:
+        post_role_guide(api, post_guide_id,
+                        "premium_subscriber" in {tag for r in roles.values() for tag in r.get("tags", {})},
+                        problems)
 
     try:
-        roles = api.call("GET", "/guilds/" + guild_id + "/roles")
-        everyone = next(r for r in roles if r["id"] == guild_id)
-        previous = int(everyone["permissions"])
-        reduced = previous & ~INVITE & ~MENTION_ALL
-        if previous != reduced:
-            api.call("PATCH", "/guilds/" + guild_id + "/roles/" + guild_id, {"permissions": str(reduced)})
-        print("Permissões globais de membros conferidas.")
-    except (DiscordError, StopIteration) as err:
-        problems.append("Cargo @everyone: " + str(err))
-
+        all_roles = api.call("GET", "/guilds/" + guild_id + "/roles")
+        everyone = next(r for r in all_roles if r["id"] == guild_id)
+        current = int(everyone.get("permissions", 0))
+        reduced = current & ~INVITE & ~MENTION_ALL
+        if reduced != current:
+            api.call("PATCH", "/guilds/" + guild_id + "/roles/" + guild_id,
+                     {"permissions": str(reduced)})
+        print("Permissões de @everyone conferidas.")
+    except (DiscordError, StopIteration) as error:
+        problems.append("@everyone: " + str(error))
     try:
         patch = {}
         if guild.get("verification_level", 0) < 3:
@@ -277,46 +506,29 @@ def main():
             patch["explicit_content_filter"] = 2
         if patch:
             api.call("PATCH", "/guilds/" + guild_id, patch)
-        print("Verificação e filtro de mídia conferidos.")
-    except DiscordError as err:
-        problems.append("Verificação / filtro: " + str(err))
+        print("Verificação e filtro de conteúdo conferidos.")
+    except DiscordError as error:
+        problems.append("Verificação/filtro: " + str(error))
 
-    if log_id and "COMMUNITY" in guild.get("features", []):
+    log = next((c for c in channels if c.get("name") == "logs-de-seguranca"
+                and c.get("type") == 0), None)
+    if log and "COMMUNITY" in guild.get("features", []):
         try:
-            api.call("PATCH", "/guilds/" + guild_id, {"safety_alerts_channel_id": log_id})
-        except DiscordError as err:
-            problems.append("Canal de alertas de segurança: " + str(err))
-
-    try:
-        rules = api.call("GET", "/guilds/" + guild_id + "/auto-moderation/rules")
-        for name, trigger in (("WP | Anti-spam", 3), ("WP | Anti-raid de menções", 5)):
-            existing = next((r for r in rules if r.get("name") == name), None)
-            if existing is None and any(r.get("trigger_type") == trigger for r in rules):
-                print("Regra AutoMod do mesmo tipo já existe; mantida:", name)
-                continue
-            spec = automod(name, trigger, log_id)
-            try:
-                if existing:
-                    spec.pop("trigger_type")
-                    api.call("PATCH", "/guilds/" + guild_id + "/auto-moderation/rules/" + existing["id"], spec)
-                else:
-                    api.call("POST", "/guilds/" + guild_id + "/auto-moderation/rules", spec)
-                print("AutoMod conferido:", name)
-            except DiscordError as err:
-                problems.append("AutoMod " + name + ": " + str(err))
-    except DiscordError as err:
-        problems.append("Leitura AutoMod: " + str(err))
-
-    print("\nCONCLUÍDO — confira canais e proteções nativas no Discord.")
+            api.call("PATCH", "/guilds/" + guild_id,
+                     {"safety_alerts_channel_id": log["id"]})
+        except DiscordError as error:
+            problems.append("Canal de alertas: " + str(error))
+    apply_automod(api, guild_id, channels, problems)
+    print("Configuração concluída. AutoMod do ponto BLOQUEIA e aplica timeout; não bane.")
     if problems:
-        for p in problems:
-            print("ATENÇÃO:", p)
-        sys.exit(2)
-    print("Sem falhas de API reportadas. Proteção anti-raid não é garantia absoluta.")
+        for problem in problems:
+            print("ATENÇÃO:", problem)
+        sys.exit("Configuração parcial: " + str(len(problems)) + " pendência(s)")
+    print("SEM FALHAS DE API REPORTADAS. Execute audit para confirmar.")
 
 
 if __name__ == "__main__":
     try:
         main()
-    except DiscordError as err:
-        sys.exit("Falha: " + str(err))
+    except DiscordError as error:
+        sys.exit("Falha: " + str(error))
