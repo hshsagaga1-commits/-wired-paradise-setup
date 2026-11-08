@@ -1,6 +1,8 @@
 name: Configurar Wired Paradise
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       modo:
@@ -37,6 +39,6 @@ jobs:
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
-          WP_MODE: ${{ inputs.modo }}
-          WP_CONFIRMATION: ${{ inputs.confirmar }}
+          WP_MODE: ${{ github.event_name == 'push' && 'preview' || inputs.modo }}
+          WP_CONFIRMATION: ${{ github.event_name == 'push' && '' || inputs.confirmar }}
         run: python setup.py
