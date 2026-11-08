@@ -5,13 +5,14 @@ on:
   workflow_dispatch:
     inputs:
       modo:
-        description: "Prévia não altera; Aplicar configura os canais"
+        description: "Prévia e auditoria são somente leitura; Aplicar altera o servidor"
         type: choice
         required: true
         default: preview
         options:
           - preview
           - apply
+          - audit
       confirmar:
         description: "Somente para aplicar: escreva APLICAR"
         type: string
