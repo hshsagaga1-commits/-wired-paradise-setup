@@ -116,12 +116,78 @@ def automod(name, trigger_type, log_id):
     return spec
 
 
+
+def audit_server(api, guild, guild_id):
+    """Auditoria apenas GET: nenhuma alteração no Discord."""
+    problems = []
+    channels = api.call("GET", "/guilds/" + guild_id + "/channels")
+    roles = api.call("GET", "/guilds/" + guild_id + "/roles")
+    rules = api.call("GET", "/guilds/" + guild_id + "/auto-moderation/rules")
+    print("AUDITORIA SOMENTE LEITURA — nenhuma configuração será alterada.")
+
+    for category, specs in CHANNELS.items():
+        cat = find_channel(channels, category, 4)
+        if not cat:
+            problems.append("Categoria ausente: " + category)
+            continue
+        print("OK categoria:", category)
+        for name, typ, _, slow, readonly in specs:
+            ch = find_channel(channels, name, typ, cat["id"])
+            if not ch:
+                problems.append("Canal ausente: " + name)
+                continue
+            print("OK canal:", name)
+            expected_deny = INVITE | MENTION_ALL
+            if category == "SEGURANÇA":
+                expected_deny |= VIEW
+            if readonly:
+                expected_deny |= SEND
+            everyone = next((o for o in ch.get("permission_overwrites", []) if o.get("id") == guild_id and o.get("type") == 0), None)
+            denied = int(everyone.get("deny", 0)) if everyone else 0
+            allowed = int(everyone.get("allow", 0)) if everyone else 0
+            if (denied & expected_deny) != expected_deny or (allowed & expected_deny):
+                problems.append("Permissões @everyone insuficientes no canal: " + name)
+            if typ == 0 and int(ch.get("rate_limit_per_user", 0)) < slow:
+                problems.append("Slowmode abaixo do esperado: " + name)
+
+    everyone_role = next((r for r in roles if r.get("id") == guild_id), None)
+    if not everyone_role:
+        problems.append("Cargo @everyone não encontrado")
+    elif int(everyone_role.get("permissions", 0)) & (INVITE | MENTION_ALL):
+        problems.append("Cargo @everyone permite convites ou menções globais")
+    else:
+        print("OK cargo @everyone: convites e menções globais limitados")
+
+    if guild.get("verification_level", 0) < 3:
+        problems.append("Verificação do servidor abaixo de Alta")
+    else:
+        print("OK verificação do servidor")
+    if guild.get("explicit_content_filter", 0) < 2:
+        problems.append("Filtro de mídia abaixo do esperado")
+    else:
+        print("OK filtro de mídia")
+
+    for name in ("WP | Anti-spam", "WP | Anti-raid de menções"):
+        rule = next((r for r in rules if r.get("name") == name), None)
+        if not rule or not rule.get("enabled"):
+            problems.append("Regra AutoMod ausente ou desativada: " + name)
+        else:
+            print("OK AutoMod:", name)
+
+    if problems:
+        for p in problems:
+            print("ATENÇÃO:", p)
+        sys.exit("Auditoria encontrou " + str(len(problems)) + " pendência(s)")
+    print("AUDITORIA APROVADA — configurações esperadas encontradas.")
+    print("Nota: permissões efetivas de outros cargos e proteção real contra ataques exigem revisão adicional.")
+
+
 def main():
     mode = os.getenv("WP_MODE", "preview")
     confirm = os.getenv("WP_CONFIRMATION", "")
     token = os.getenv("DISCORD_BOT_TOKEN", "").strip()
     guild_id = os.getenv("DISCORD_GUILD_ID", "").strip()
-    if mode not in ("preview", "apply"):
+    if mode not in ("preview", "apply", "audit"):
         sys.exit("Modo inválido")
     if mode == "apply" and confirm != "APLICAR":
         sys.exit("Falta confirmação APLICAR; nada foi alterado")
@@ -133,6 +199,9 @@ def main():
         sys.exit("ID diferente do Wired Paradise autorizado; operação cancelada")
     guild = api.call("GET", "/guilds/" + guild_id)
     print("Servidor autorizado confirmado (identificador oculto nos logs).")
+    if mode == "audit":
+        audit_server(api, guild, guild_id)
+        return
     channels = api.call("GET", "/guilds/" + guild_id + "/channels")
     if mode == "preview":
         print("PRÉVIA — NENHUMA ALTERAÇÃO NO DISCORD")
