@@ -31,6 +31,14 @@ Cria a estrutura básica de um servidor Discord pelo **GitHub Actions**, uma ún
 
 > Se a aba **Actions** não mostrar o fluxo, talvez seja preciso habilitar ações nas configurações do repositório. O fluxo só é executado quando você iniciar manualmente.
 
+## Ban instantâneo pelo ponto (opcional, exige bot online)
+
+O arquivo `live_bot.py` é um **guardião separado**, implementado mas **NÃO está hospedado nem ativo**. O GitHub Actions não o executa. Ele escuta o evento do AutoMod `WP | Ponto no spam` e só bane se a regra ainda usa a regex do ponto isolado, se o evento veio do `#spam` da categoria COMUNIDADE e se o autor não é o proprietário.
+
+Para utilizá-lo no futuro, escolha uma hospedagem confiável que mantenha um processo Python online; instale `discord.py>=2.4,<3`, configure `DISCORD_BOT_TOKEN` como variável **secreta** do host e execute `python live_bot.py`. O bot precisa de **Gerenciar Servidor** (para receber a execução do AutoMod) e **Banir Membros** com hierarquia de cargo suficiente. A alternativa nativa continua funcionando mesmo com o guardião offline: bloqueio e timeout, **sem ban**.
+
+**Não rode o guardião antes de testar o filtro e confirmar que quer banimentos automáticos definitivos.** Um usuário de teste real não deve enviar `.` com o guardião ativo se você não quiser que a conta seja banida. O arquivo foi revisado estaticamente, mas ainda não foi testado em um Discord real.
+
 ## Anti-raid — limites
 
 O AutoMod bloqueia mensagens e registra alertas. O teste `audit` verifica **configurações**, não simula raids, não confirma acesso real de todos os membros e não configura banimento por ponto. O montador é uma execução pontual, sem serviço online 24h. Revise verificação, moderação e segurança diretamente no Discord.
