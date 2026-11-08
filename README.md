@@ -3,13 +3,19 @@
 Cria a estrutura básica de um servidor Discord pelo **GitHub Actions**, uma única vez, sem deixar um bot hospedado 24h. Roda no iPhone.
 
 ## O que faz
-- **COMUNIDADE:** `chat-geral`, `midias`, `spam`
-- **MEUS PROJETOS:** `meus-scripts`, `metodos-de-qualidade` (publicação só pela equipe)
-- **VOZ:** `Call Geral`
-- **SEGURANÇA:** `logs-de-seguranca` privado
-- Slowmode no chat/mídias; limita convites e menções a todos; aumenta nível de verificação e filtro de conteúdo; tenta criar AutoMod anti-spam e contra menções em massa.
 
-Nada é apagado. Execute primeiro em **prévia**, depois **aplicar** para gravar as alterações. Executar novamente evita duplicatas nas categorias correspondentes.
+- **COMUNIDADE:** `anuncios` (só proprietário publica), `chat-geral` (texto, sem anexos nem prévias de link), `midias` (texto, imagem, vídeo e arquivos), `spam` (texto), `cargos` (guia de cargos somente leitura).
+- **MEUS PROJETOS:** `meus-scripts` e `metodos-de-qualidade` (só proprietário publica).
+- **VOZ:** `Call Geral`.
+- **SEGURANÇA:** `logs-de-seguranca` (alertas do AutoMod, visível para dono e Moderação).
+- **Cargos:** `👑 Dono` (vermelho), `Moderação` (azul), `Membro` (branco), `Cargo Boost` (rosa) e `Sigma 67` (roxo). Dono e Sigma 67 são atribuídos apenas ao proprietário identificado pelo Discord. A coroa aparece no nome; ícone real de cargo depende do recurso `ROLE_ICONS` no servidor.
+- Se existir o cargo **Server Booster nativo**, ele é aproveitado porque o Discord o atribui automaticamente; se não existir, o cargo personalizado Cargo Boost **não é atribuído automaticamente**.
+- **Filtro do `.` no `spam`:** o AutoMod bloqueia a mensagem que contém **exatamente um ponto** e aplica 60 segundos de timeout, além de gerar alerta. Ele não dá ban. Para banir imediatamente alguém que enviou apenas `.`, é necessário hospedar um bot com eventos em tempo real e permissão de banir. Não há mecanismo de banimento permanente em uma configuração pontual do GitHub Actions.
+- Proteções adicionais contra spam, excesso de menções, convites de membros comuns e verificação elevada.
+
+**Limites importantes:** o Discord permite que administradores ignorem bloqueios de canal. No `chat-geral`, bloquear anexos e embeds não impede a pessoa de escrever um URL de imagem como texto. Criar o cargo `Membro` não o atribui automaticamente aos próximos participantes: é preciso atribuir manualmente, por Onboarding apropriado ou com um bot online.
+
+**O script não apaga canais, cargos, mensagens ou membros existentes.** Cada aplicação é idempotente para os canais e cargos de mesmo nome nas categorias previstas. O texto informativo do canal `cargos` só é publicado quando esse canal é criado pela primeira vez.
 
 ## Configurar pelo iPhone
 1. No Discord: **Configurações → Avançado → Modo desenvolvedor**, depois copie o **ID do servidor Wired Paradise**. É o ID numérico, não um convite.
@@ -17,28 +23,19 @@ Nada é apagado. Execute primeiro em **prévia**, depois **aplicar** para gravar
 3. Neste GitHub: **Settings → Secrets and variables → Actions → New repository secret**. Cadastre:
    - `DISCORD_BOT_TOKEN`: token do bot;
    - `DISCORD_GUILD_ID`: ID numérico do seu servidor.
-4. Vá a **Actions → Configurar Wired Paradise → Run workflow**. Escolha `preview` e execute. Veja o resultado nos logs.
-5. Se estiver certo, rode outra vez: escolha `apply` e digite **APLICAR** no campo `confirmar`.
-6. Confira no Discord o que realmente foi criado. Retire a permissão de **Administrador** ou remova o bot quando terminar.
+4. Vá a **Actions → Configurar Wired Paradise → Run workflow** e execute `preview` para ver o plano sem alterar nada.
+5. Se estiver certo, escolha `apply` e digite **APLICAR** no campo `confirmar`. A alteração real só ocorre agora.
+6. Execute `audit` para verificar categorias, canais, cargos, permissões e AutoMod. Este modo usa apenas consultas GET, sem modificar o Discord.
+7. Teste com uma conta normal (não Admin), pois quem tem Administrador pode ignorar restrições: no `chat-geral` enviar texto e tentar um arquivo; no `midias` enviar texto e anexo; nos canais de anúncio/projetos tentar escrever; no `spam` enviar uma mensagem contendo somente `.` e confirmar se foi bloqueada. Verifique os avisos em `logs-de-seguranca`.
+8. Retire a permissão de **Administrador** ou remova o bot quando terminar, conforme o uso futuro.
 
 > Se a aba **Actions** não mostrar o fluxo, talvez seja preciso habilitar ações nas configurações do repositório. O fluxo só é executado quando você iniciar manualmente.
 
 ## Anti-raid — limites
-O AutoMod do Discord ajuda a bloquear spam e excesso de menções. Uma execução pontual **não é um monitor anti-raid 24h**, não faz verificação CAPTCHA de membros e não garante proteção total. Revise no Discord a verificação dos membros, a proteção nativa contra raids, alertas, permissões dos cargos e exigência de 2FA para moderação.
 
-**Mantenha este repositório privado.** Nunca registre token em arquivos, logs, commits ou mensagens. Mesmo um Secret pode ser usado por um workflow malicioso se alguém conseguir editar e executar código com acesso a ele. O acesso de escrita ao repositório deve ficar restrito, e a conta GitHub deve usar autenticação de dois fatores.
+O AutoMod bloqueia mensagens e registra alertas. O teste `audit` verifica **configurações**, não simula raids, não confirma acesso real de todos os membros e não configura banimento por ponto. O montador é uma execução pontual, sem serviço online 24h. Revise verificação, moderação e segurança diretamente no Discord.
 
-O ID do servidor é um identificador, **não uma senha**. O código atual usa uma impressão digital SHA-256 para impedir execução num servidor diferente sem publicar o ID em texto puro; isso **não é criptografia nem substitui os Secrets**. O ID também pode permanecer visível em commits antigos, caso a pessoa tenha tido acesso ao histórico público.
-
-O workflow foi endurecido: **somente execução manual**, **somente branch `main`**, **somente o proprietário**, `GITHUB_TOKEN` com leitura limitada, checkout sem credenciais persistentes e dependências fixadas por hash. Estas medidas reduzem riscos, mas não substituem a proteção da conta e do repositório.
-
-### Depois de configurar o servidor
-1. Tire a permissão **Administrador** do bot no Discord ou expulse o bot, se não vai mais usá-lo.
-2. Se não pretende rodar o montador outra vez, em **GitHub → Settings → Secrets and variables → Actions**, apague `DISCORD_BOT_TOKEN`. Para revogar de verdade o token que já existiu, use **Reset Token** no portal do Discord; será preciso cadastrar o novo token como Secret caso queira usar o bot outra vez.
-3. Em **GitHub → Settings → General → Danger Zone → Change repository visibility**, torne o repositório **Private**. Confira quem tem acesso de escrita.
-4. Ative 2FA/passkey na conta do GitHub e evite publicar capturas de tela com credenciais.
-
-**Secrets não podem ser consultados em texto puro** pelo GitHub depois de cadastrados. Não tente “decodificar” ou ofuscar o token: a segurança vem de limitar quem pode utilizá-lo e de revogá-lo quando não for mais necessário.
+O canal `logs-de-seguranca` é um registro privado de alertas: **não é um chat público**. O bot pode adicionar avisos quando regras do AutoMod são acionadas.
 
 ## Permissões
 O bot precisa ter as permissões necessárias para administrar categorias, cargos, AutoMod e configurações; Administrador **somente temporariamente**. O código não faz vigilância contínua.
