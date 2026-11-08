@@ -34,7 +34,7 @@ CHANNELS = {
         ("anuncios", 0, "Avisos oficiais: somente o dono publica.", 0, "owner"),
         ("chat-geral", 0, "Converse por texto. Anexos e prévias de links desativados.", 5, "chat"),
         ("midias", 0, "Imagens, vídeos, arquivos e conversa liberados.", 2, "media"),
-        ("spam", 0, "Conversa livre. Mensagem contendo apenas um ponto será bloqueada pelo AutoMod.", 2, "spam"),
+        ("spam", 0, "⚠️ CANAL-ARMADILHA: qualquer mensagem aqui causa BAN permanente quando o guardião estiver online. NÃO ESCREVA.", 2, "spam"),
         ("cargos", 0, "Informações dos cargos; somente o dono publica.", 0, "owner"),
     ],
     "MEUS PROJETOS": [
@@ -256,16 +256,17 @@ def automod(name, trigger_type, log_id):
     return spec
 
 
-def dot_rule(log_id, channels, spam_id):
-    """AutoMod nativo impede mensagem exatamente '.', NÃO bane usuário."""
+def trap_rule(log_id, channels, spam_id):
+    """AutoMod bloqueia texto no spam; anexos só acionam ban com guardião online."""
     exempt = [
         c["id"] for c in channels if c.get("type") in (0, 5, 11, 12, 15, 16)
         and c.get("id") != spam_id
     ]
     if len(exempt) > 50:
         raise ValueError("Há canais demais para limitar o filtro ao spam com segurança")
-    rule = automod("WP | Ponto no spam", 1, log_id)
-    rule["trigger_metadata"] = {"regex_patterns": [r"^\.$"]}
+    rule = automod("WP | Armadilha spam", 1, log_id)
+    # Regex RE2: inclui letras, símbolos e quebras de linha.
+    rule["trigger_metadata"] = {"regex_patterns": [r"[\s\S]+"]}
     rule["exempt_channels"] = exempt
     rule["actions"].append({"type": 3, "metadata": {"duration_seconds": 60}})
     return rule
@@ -286,13 +287,15 @@ def apply_automod(api, guild_id, channels, problems):
     ]
     if spam:
         try:
-            specs.append(dot_rule(log["id"] if log else None, channels, spam["id"]))
+            specs.append(trap_rule(log["id"] if log else None, channels, spam["id"]))
         except ValueError as error:
-            problems.append("Filtro de ponto: " + str(error))
+            problems.append("Armadilha spam: " + str(error))
     else:
-        problems.append("Filtro de ponto: canal spam não encontrado")
+        problems.append("Armadilha spam: canal não encontrado")
     for spec in specs:
         existing = next((r for r in rules if r.get("name") == spec["name"]), None)
+        if spec["name"] == "WP | Armadilha spam" and existing is None:
+            existing = next((r for r in rules if r.get("name") == "WP | Ponto no spam"), None)
         trigger = spec["trigger_type"]
         if existing is None and trigger in (3, 5) and any(r.get("trigger_type") == trigger for r in rules):
             print("AutoMod nativo do mesmo tipo já existe; mantido:", spec["name"])
@@ -394,22 +397,26 @@ def validate_server(api, guild, guild_id):
         problems.append("Verificação abaixo de Alta")
     if guild.get("explicit_content_filter", 0) < 2:
         problems.append("Filtro de mídia insuficiente")
-    dot = next((r for r in rules if r.get("name") == "WP | Ponto no spam"), None)
-    spam = next((c for c in channels if c.get("name") == "spam" and c.get("type") == 0), None)
-    if not dot or not dot.get("enabled") or dot.get("trigger_type") != 1 or (
-        dot.get("trigger_metadata", {}).get("regex_patterns") != [r"^\.$"]
+    trap = next((r for r in rules if r.get("name") == "WP | Armadilha spam"), None)
+    spam = next((ch for ch in channels if ch.get("name") == "spam" and
+                 ch.get("type") == 0 and any(
+                     cat.get("name") == "COMUNIDADE" and cat.get("type") == 4
+                     and ch.get("parent_id") == cat.get("id") for cat in channels)), None)
+    if not trap or not trap.get("enabled") or trap.get("trigger_type") != 1 or (
+        trap.get("trigger_metadata", {}).get("regex_patterns") != [r"[\s\S]+"]
     ):
-        problems.append("Filtro do ponto no spam não está ativo")
+        problems.append("AutoMod da armadilha não está ativo ou não cobre qualquer texto")
     elif not spam:
-        problems.append("Canal spam ausente para o filtro do ponto")
-    elif spam["id"] in dot.get("exempt_channels", []):
-        problems.append("Canal spam foi isentado acidentalmente do filtro do ponto")
+        problems.append("Canal spam da armadilha ausente")
+    elif spam["id"] in trap.get("exempt_channels", []):
+        problems.append("Canal spam foi isentado da própria armadilha")
     else:
-        other_text = {c["id"] for c in channels if c.get("type") in (0, 5, 11, 12, 15, 16)
-                      and c["id"] != spam["id"]}
-        if not other_text.issubset(set(dot.get("exempt_channels", []))):
-            problems.append("Filtro de ponto pode atingir canais fora do spam")
-        print("OK AutoMod: ponto isolado bloqueado no spam; banimento NÃO configurado")
+        other_text = {ch["id"] for ch in channels
+                      if ch.get("type") in (0, 5, 11, 12, 15, 16)
+                      and ch["id"] != spam["id"]}
+        if not other_text.issubset(set(trap.get("exempt_channels", []))):
+            problems.append("Armadilha pode bloquear texto em canais fora do spam")
+        print("OK AutoMod: qualquer texto bloqueado no spam; ban requer bot online")
     for name in ("WP | Anti-spam", "WP | Anti-raid de menções"):
         if not any(r.get("name") == name and r.get("enabled") for r in rules):
             problems.append("AutoMod ausente/inativo: " + name)
@@ -456,8 +463,8 @@ def main():
             for name, typ, _, _, policy in specs:
                 ch = find_channel(channels, name, typ, cat["id"]) if cat else None
                 print(" Canal", "EXISTE/CONFERIR" if ch else "CRIAR", name, "[" + policy + "]")
-        print("Inclui permissões, atribuição de Dono e Sigma 67 ao proprietário e filtro do ponto no spam.")
-        print("Ban instantâneo por ponto exige bot permanentemente online; não é feito pelo AutoMod.")
+        print("Inclui permissões, cargos do proprietário e armadilha do spam para qualquer texto.")
+        print("Ban imediato por qualquer mensagem (inclusive anexo) exige guardião permanentemente online.")
         return
 
     problems = []
@@ -545,7 +552,7 @@ def main():
         except DiscordError as error:
             problems.append("Canal de alertas: " + str(error))
     apply_automod(api, guild_id, channels, problems)
-    print("Configuração concluída. AutoMod do ponto BLOQUEIA e aplica timeout; não bane.")
+    print("Configuração concluída. AutoMod bloqueia texto no spam; ban permanente exige guardião online.")
     if problems:
         for problem in problems:
             print("ATENÇÃO:", problem)
