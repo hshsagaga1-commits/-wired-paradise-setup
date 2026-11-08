@@ -26,7 +26,19 @@ Nada é apagado. Execute primeiro em **prévia**, depois **aplicar** para gravar
 ## Anti-raid — limites
 O AutoMod do Discord ajuda a bloquear spam e excesso de menções. Uma execução pontual **não é um monitor anti-raid 24h**, não faz verificação CAPTCHA de membros e não garante proteção total. Revise no Discord a verificação dos membros, a proteção nativa contra raids, alertas, permissões dos cargos e exigência de 2FA para moderação.
 
-O repositório pode ser público **desde que o token permaneça exclusivamente em GitHub Actions Secrets**. Nunca registre o token em arquivos ou logs. Uma conta GitHub comprometida ou workflow malicioso também coloca o token em risco: revise alterações antes de executar. Recomendado usar um repositório privado, se disponível.
+**Mantenha este repositório privado.** Nunca registre token em arquivos, logs, commits ou mensagens. Mesmo um Secret pode ser usado por um workflow malicioso se alguém conseguir editar e executar código com acesso a ele. O acesso de escrita ao repositório deve ficar restrito, e a conta GitHub deve usar autenticação de dois fatores.
+
+O ID do servidor é um identificador, **não uma senha**. O código atual usa uma impressão digital SHA-256 para impedir execução num servidor diferente sem publicar o ID em texto puro; isso **não é criptografia nem substitui os Secrets**. O ID também pode permanecer visível em commits antigos, caso a pessoa tenha tido acesso ao histórico público.
+
+O workflow foi endurecido: **somente execução manual**, **somente branch `main`**, **somente o proprietário**, `GITHUB_TOKEN` com leitura limitada, checkout sem credenciais persistentes e dependências fixadas por hash. Estas medidas reduzem riscos, mas não substituem a proteção da conta e do repositório.
+
+### Depois de configurar o servidor
+1. Tire a permissão **Administrador** do bot no Discord ou expulse o bot, se não vai mais usá-lo.
+2. Se não pretende rodar o montador outra vez, em **GitHub → Settings → Secrets and variables → Actions**, apague `DISCORD_BOT_TOKEN`. Para revogar de verdade o token que já existiu, use **Reset Token** no portal do Discord; será preciso cadastrar o novo token como Secret caso queira usar o bot outra vez.
+3. Em **GitHub → Settings → General → Danger Zone → Change repository visibility**, torne o repositório **Private**. Confira quem tem acesso de escrita.
+4. Ative 2FA/passkey na conta do GitHub e evite publicar capturas de tela com credenciais.
+
+**Secrets não podem ser consultados em texto puro** pelo GitHub depois de cadastrados. Não tente “decodificar” ou ofuscar o token: a segurança vem de limitar quem pode utilizá-lo e de revogá-lo quando não for mais necessário.
 
 ## Permissões
 O bot precisa ter as permissões necessárias para administrar categorias, cargos, AutoMod e configurações; Administrador **somente temporariamente**. O código não faz vigilância contínua.
