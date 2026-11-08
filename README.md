@@ -37,6 +37,16 @@ O AutoMod bloqueia mensagens e registra alertas. O teste `audit` verifica **conf
 
 O canal `logs-de-seguranca` é um registro privado de alertas: **não é um chat público**. O bot pode adicionar avisos quando regras do AutoMod são acionadas.
 
+## Segurança do GitHub e do token
+
+- O repositório **deve ficar privado**. Nas configurações: **Settings → General → Danger Zone → Change repository visibility → Private**. O histórico público anterior não é apagado de cópias já feitas.
+- **GitHub Actions Secrets** são adequados para guardar o token do Discord. Não há necessidade de ofuscar ou decodificar o token; ele não deve aparecer no código, em Issues, prints ou logs.
+- O workflow usa apenas **execução manual** autorizada, somente a branch `main` e a conta proprietária, com permissão do GitHub limitada a leitura e ações fixadas por hash.
+- O ID do servidor é **identificador, não senha**. O código atual contém apenas uma impressão digital SHA-256, mas o ID aparecia em commits antigos. Não confunda fingerprint com criptografia.
+- Ative **2FA/passkey** na conta do GitHub e revise quem tem permissão para editar a branch principal. Qualquer pessoa que possa alterar o workflow/código executado com Secrets representa um risco.
+- Se não vai usar o montador novamente, **retire a permissão Administrador do bot** ou remova o bot do servidor. Para revogar o token atual, use **Reset Token** no Portal de Desenvolvedores do Discord e remova o Secret antigo do GitHub. Se desejar reutilizar o montador depois, cadastre o novo token no Secret.
+- Atenção: quem tem o token pode controlar o bot enquanto ele for válido, mesmo que você apague o Secret. **Reset Token** é o que invalida a credencial anterior.
+
 ## Permissões
 O bot precisa ter as permissões necessárias para administrar categorias, cargos, AutoMod e configurações; Administrador **somente temporariamente**. O código não faz vigilância contínua.
 
