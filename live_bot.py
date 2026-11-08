@@ -13,7 +13,7 @@ import discord
 
 FINGERPRINT = "cf1a67632a67f690daacb0e2b2c11c7156d8f59d6dc27bb85c5d1114e58ad02e"
 TRAP_RULE_NAME = "WP | Armadilha spam"
-TRAP_PATTERN = String.raw`r"[\s\S]+"`
+TRAP_PATTERN = r"[\s\S]+"
 TRAP_CHANNEL = "spam"
 TRAP_CATEGORY = "COMUNIDADE"
 DRY_RUN = os.environ.get("WP_DRY_RUN", "").strip() == "1"
