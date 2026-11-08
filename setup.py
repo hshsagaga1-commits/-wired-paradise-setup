@@ -24,6 +24,9 @@ ATTACH = 1 << 15
 HISTORY = 1 << 16
 MENTION_ALL = 1 << 17
 MODERATE_MEMBERS = 1 << 40
+CREATE_PUBLIC_THREADS = 1 << 35
+CREATE_PRIVATE_THREADS = 1 << 36
+SEND_IN_THREADS = 1 << 38
 
 # (nome, tipo Discord, tópico, modo lento em segundos, política)
 CHANNELS = {
@@ -131,7 +134,7 @@ def overwrites(existing, guild_id, policy, owner_id=None, moderator_id=None):
     deny = INVITE | MENTION_ALL
     allow = 0
     if policy == "owner":
-        deny |= SEND
+        deny |= SEND | SEND_IN_THREADS | CREATE_PUBLIC_THREADS | CREATE_PRIVATE_THREADS
     elif policy in ("chat", "media", "spam"):
         allow |= SEND
     if policy == "chat":
@@ -144,14 +147,18 @@ def overwrites(existing, guild_id, policy, owner_id=None, moderator_id=None):
 
     # Não deixar outros cargos concederem escrita em canais exclusivos,
     # nem anexos em chat ou VISUALIZAR em logs privados.
-    exclusive = SEND if policy == "owner" else (ATTACH | EMBED if policy == "chat" else (VIEW if policy == "logs" else 0))
+    exclusive = (SEND | SEND_IN_THREADS | CREATE_PUBLIC_THREADS | CREATE_PRIVATE_THREADS) if policy == "owner" else (ATTACH | EMBED if policy == "chat" else (VIEW if policy == "logs" else 0))
     if exclusive:
         for overwrite in result:
-            if overwrite.get("type") == 0 and str(overwrite.get("id")) != str(guild_id):
-                overwrite["allow"] = str(int(overwrite.get("allow", 0)) & ~exclusive)
+            oid = str(overwrite.get("id"))
+            if oid == str(guild_id) or (owner_id and oid == str(owner_id)):
+                continue
+            if policy == "logs" and moderator_id and oid == str(moderator_id):
+                continue
+            overwrite["allow"] = str(int(overwrite.get("allow", 0)) & ~exclusive)
 
     if owner_id and policy in ("owner", "logs"):
-        owner_access = SEND | VIEW | HISTORY if policy == "owner" else VIEW | HISTORY
+        owner_access = (SEND | SEND_IN_THREADS | VIEW | HISTORY | CREATE_PUBLIC_THREADS | CREATE_PRIVATE_THREADS) if policy == "owner" else VIEW | HISTORY
         set_overwrite(result, owner_id, 1, allow=owner_access)
     if moderator_id and policy == "logs":
         set_overwrite(result, moderator_id, 0, allow=VIEW | HISTORY)
