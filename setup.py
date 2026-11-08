@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Montador pontual do Wired Paradise. Usa a API oficial do Discord."""
+import hashlib
+import hmac
 import json
 import os
 import sys
@@ -9,6 +11,9 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 BASE = "https://discord.com/api/v10"
+# Fingerprint para evitar executar em outro servidor sem publicar seu ID em texto claro.
+# Isto não é um segredo nem criptografia: a proteção do token está no GitHub Secrets.
+AUTHORIZED_GUILD_SHA256 = "cf1a67632a67f690daacb0e2b2c11c7156d8f59d6dc27bb85c5d1114e58ad02e"
 INVITE = 1 << 0
 VIEW = 1 << 10
 SEND = 1 << 11
@@ -120,15 +125,14 @@ def main():
         sys.exit("Modo inválido")
     if mode == "apply" and confirm != "APLICAR":
         sys.exit("Falta confirmação APLICAR; nada foi alterado")
-    if not token or not guild_id.isdigit():
+    if not token or not guild_id.isascii() or not guild_id.isdecimal():
         sys.exit("Cadastre DISCORD_BOT_TOKEN e DISCORD_GUILD_ID em GitHub Actions Secrets")
     api = API(token)
-    # Use the ID copied directly from the user's Wired Paradise server.
-    # Names can include emojis, styling, or later be renamed.
-    if guild_id != "1568895510096519208":
+    # Confere o identificador autorizado sem imprimi-lo em logs ou no código.
+    if not hmac.compare_digest(hashlib.sha256(guild_id.encode("ascii")).hexdigest(), AUTHORIZED_GUILD_SHA256):
         sys.exit("ID diferente do Wired Paradise autorizado; operação cancelada")
     guild = api.call("GET", "/guilds/" + guild_id)
-    print("Servidor confirmado pelo ID:", guild.get("name", "(sem nome)"), "(" + guild_id + ")")
+    print("Servidor autorizado confirmado (identificador oculto nos logs).")
     channels = api.call("GET", "/guilds/" + guild_id + "/channels")
     if mode == "preview":
         print("PRÉVIA — NENHUMA ALTERAÇÃO NO DISCORD")
