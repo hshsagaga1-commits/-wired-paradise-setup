@@ -31,6 +31,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Verificar regras e permissões
+        run: python -m unittest discover -s tests -v
       - name: Executar configuração manual
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
