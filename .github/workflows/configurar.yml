@@ -1,0 +1,40 @@
+name: Configurar Wired Paradise
+
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "Prévia não altera; Aplicar configura os canais"
+        type: choice
+        required: true
+        default: preview
+        options:
+          - preview
+          - apply
+      confirmar:
+        description: "Somente para aplicar: escreva APLICAR"
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  configurar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Executar configuração manual
+        env:
+          DISCORD_BOT_TOKEN: \${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: \${{ secrets.DISCORD_GUILD_ID }}
+          WP_MODE: \${{ inputs.modo }}
+          WP_CONFIRMATION: \${{ inputs.confirmar }}
+        run: python setup.py
