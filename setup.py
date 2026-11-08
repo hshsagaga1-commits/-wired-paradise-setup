@@ -341,11 +341,26 @@ def validate_server(api, guild, guild_id):
     role_names = {r.get("name") for r in roles}
     if "premium_subscriber" in {tag for r in roles for tag in r.get("tags", {})}:
         role_names.add("Cargo Boost")
-    for role, _, _, _ in ROLE_SPECS:
-        if role not in role_names:
-            problems.append("Cargo ausente: " + role)
-        else:
-            print("OK cargo:", role)
+    for name, color, _, _ in ROLE_SPECS:
+        role = next((r for r in roles if r.get("name") == name), None)
+        if name == "Cargo Boost" and not role:
+            role = next((r for r in roles if "premium_subscriber" in r.get("tags", {})), None)
+        if not role:
+            problems.append("Cargo ausente: " + name)
+            continue
+        if not role.get("managed") and int(role.get("color", 0)) != color:
+            problems.append("Cor do cargo não confere: " + name)
+        print("OK cargo:", name)
+    if owner_id:
+        try:
+            owner = api.call("GET", "/guilds/" + guild_id + "/members/" + owner_id)
+            for name in ("👑 Dono", "Sigma 67"):
+                role = next((r for r in roles if r.get("name") == name), None)
+                if role and role["id"] not in owner.get("roles", []):
+                    problems.append("Proprietário não possui o cargo: " + name)
+            print("OK cargos exclusivos atribuídos ao proprietário.")
+        except DiscordError:
+            print("AVISO: não foi possível conferir os cargos do proprietário por API.")
     print("AUDITORIA SOMENTE LEITURA — não altera membros nem canais.")
     for category, specs in CHANNELS.items():
         cat = find_channel(channels, category, 4)
@@ -382,7 +397,7 @@ def validate_server(api, guild, guild_id):
     dot = next((r for r in rules if r.get("name") == "WP | Ponto no spam"), None)
     spam = next((c for c in channels if c.get("name") == "spam" and c.get("type") == 0), None)
     if not dot or not dot.get("enabled") or dot.get("trigger_type") != 1 or (
-        not dot.get("trigger_metadata", {}).get("regex_patterns")
+        dot.get("trigger_metadata", {}).get("regex_patterns") != [r"^\\.$"]
     ):
         problems.append("Filtro do ponto no spam não está ativo")
     elif not spam:
@@ -390,6 +405,10 @@ def validate_server(api, guild, guild_id):
     elif spam["id"] in dot.get("exempt_channels", []):
         problems.append("Canal spam foi isentado acidentalmente do filtro do ponto")
     else:
+        other_text = {c["id"] for c in channels if c.get("type") in (0, 5, 11, 12, 15, 16)
+                      and c["id"] != spam["id"]}
+        if not other_text.issubset(set(dot.get("exempt_channels", []))):
+            problems.append("Filtro de ponto pode atingir canais fora do spam")
         print("OK AutoMod: ponto isolado bloqueado no spam; banimento NÃO configurado")
     for name in ("WP | Anti-spam", "WP | Anti-raid de menções"):
         if not any(r.get("name") == name and r.get("enabled") for r in rules):
