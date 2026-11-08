@@ -33,8 +33,8 @@ jobs:
           python-version: '3.12'
       - name: Executar configuração manual
         env:
-          DISCORD_BOT_TOKEN: \${{ secrets.DISCORD_BOT_TOKEN }}
-          DISCORD_GUILD_ID: \${{ secrets.DISCORD_GUILD_ID }}
-          WP_MODE: \${{ inputs.modo }}
-          WP_CONFIRMATION: \${{ inputs.confirmar }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          WP_MODE: ${{ inputs.modo }}
+          WP_CONFIRMATION: ${{ inputs.confirmar }}
         run: python setup.py
