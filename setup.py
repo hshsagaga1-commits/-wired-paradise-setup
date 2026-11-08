@@ -123,9 +123,12 @@ def main():
     if not token or not guild_id.isdigit():
         sys.exit("Cadastre DISCORD_BOT_TOKEN e DISCORD_GUILD_ID em GitHub Actions Secrets")
     api = API(token)
+    # Use the ID copied directly from the user's Wired Paradise server.
+    # Names can include emojis, styling, or later be renamed.
+    if guild_id != "1568895510096519208":
+        sys.exit("ID diferente do Wired Paradise autorizado; operação cancelada")
     guild = api.call("GET", "/guilds/" + guild_id)
-    if guild.get("name", "").casefold() != "wired paradise":
-        sys.exit("Servidor diferente de Wired Paradise; operação cancelada")
+    print("Servidor confirmado pelo ID:", guild.get("name", "(sem nome)"), "(" + guild_id + ")")
     channels = api.call("GET", "/guilds/" + guild_id + "/channels")
     if mode == "preview":
         print("PRÉVIA — NENHUMA ALTERAÇÃO NO DISCORD")
