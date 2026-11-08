@@ -22,6 +22,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Conferir sintaxe de Python
-        run: python -m py_compile setup.py
+        run: python -m py_compile setup.py live_bot.py
       - name: Executar testes internos
         run: python -m unittest discover -s tests -v
