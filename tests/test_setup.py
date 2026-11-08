@@ -1,7 +1,7 @@
 import unittest
 from setup import (
     CHANNELS, ROLE_SPECS, INVITE, VIEW, SEND, MENTION_ALL, ATTACH, EMBED,
-    MODERATE_MEMBERS, ADMIN, find_channel, overwrites, automod, dot_rule,
+    MODERATE_MEMBERS, ADMIN, find_channel, overwrites, automod, trap_rule,
 )
 
 
@@ -91,22 +91,28 @@ class WiredParadiseTests(unittest.TestCase):
         self.assertTrue(moderator[2] & MODERATE_MEMBERS)
         self.assertFalse(moderator[2] & ADMIN)
 
-    def test_spam_automod_regex_is_exact(self):
+    def test_spam_trap_blocks_any_text(self):
         channels = [
             {"id": "1", "name": "spam", "type": 0},
             {"id": "2", "name": "chat-geral", "type": 0},
             {"id": "3", "name": "midias", "type": 0},
         ]
-        spec = dot_rule("4", channels, "1")
-        self.assertEqual(spec["trigger_metadata"]["regex_patterns"], [r"^\.$"])
+        spec = trap_rule("4", channels, "1")
+        self.assertEqual(spec["trigger_metadata"]["regex_patterns"], [r"[\s\S]+"])
         self.assertEqual(spec["exempt_channels"], ["2", "3"])
         self.assertEqual(spec["actions"][-1]["type"], 3)
         self.assertNotIn("ban", str(spec).lower())
 
-    def test_spam_dot_filter_refuses_too_many_exempt_channels(self):
+    def test_spam_trap_warns_in_channel_description(self):
+        spam = next(s for specs in CHANNELS.values() for s in specs if s[0] == "spam")
+        self.assertIn("BAN", spam[2])
+        self.assertIn("NÃO ESCREVA", spam[2])
+        self.assertEqual(spam[4], "spam")
+
+    def test_spam_trap_refuses_too_many_exempt_channels(self):
         channels = [{"id": str(i), "type": 0} for i in range(60)]
         with self.assertRaises(ValueError):
-            dot_rule("100", channels, "0")
+            trap_rule("100", channels, "0")
 
     def test_raid_rule_enabled(self):
         spec = automod("WP | Anti-raid de menções", 5, "111")
