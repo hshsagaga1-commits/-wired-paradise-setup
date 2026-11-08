@@ -4,13 +4,13 @@ Cria a estrutura básica de um servidor Discord pelo **GitHub Actions**, uma ún
 
 ## O que faz
 
-- **COMUNIDADE:** `anuncios` (só proprietário publica), `chat-geral` (texto, sem anexos nem prévias de link), `midias` (texto, imagem, vídeo e arquivos), `spam` (texto), `cargos` (guia de cargos somente leitura).
+- **COMUNIDADE:** `anuncios` (só proprietário publica), `chat-geral` (texto, sem anexos nem prévias de link), `midias` (texto, imagem, vídeo e arquivos), `spam` (**canal-armadilha**: qualquer mensagem pode resultar em ban permanente quando o guardião estiver online), `cargos` (guia de cargos somente leitura).
 - **MEUS PROJETOS:** `meus-scripts` e `metodos-de-qualidade` (só proprietário publica).
 - **VOZ:** `Call Geral`.
 - **SEGURANÇA:** `logs-de-seguranca` (alertas do AutoMod, visível para dono e Moderação).
 - **Cargos:** `👑 Dono` (vermelho), `Moderação` (azul), `Membro` (branco), `Cargo Boost` (rosa) e `Sigma 67` (roxo). Dono e Sigma 67 são atribuídos apenas ao proprietário identificado pelo Discord. A coroa aparece no nome; ícone real de cargo depende do recurso `ROLE_ICONS` no servidor.
 - Se existir o cargo **Server Booster nativo**, ele é aproveitado porque o Discord o atribui automaticamente; se não existir, o cargo personalizado Cargo Boost **não é atribuído automaticamente**.
-- **Filtro do `.` no `spam`:** o AutoMod bloqueia a mensagem que contém **exatamente um ponto** e aplica 60 segundos de timeout, além de gerar alerta. Ele não dá ban. Para banir imediatamente alguém que enviou apenas `.`, é necessário hospedar um bot com eventos em tempo real e permissão de banir. Não há mecanismo de banimento permanente em uma configuração pontual do GitHub Actions.
+- **Armadilha no `spam`:** o AutoMod bloqueia **qualquer mensagem com texto**, aplica timeout de 60 segundos e registra alerta. O `live_bot.py`, quando hospedado 24h, também detecta tentativas de texto barradas pelo AutoMod e **qualquer mensagem efetivamente publicada**, inclusive anexos sem texto, para banir permanentemente o autor. O Discord não oferece ban automático direto pelo AutoMod. **Sem bot online, anexos sem texto podem passar e ninguém é banido.**
 - Proteções adicionais contra spam, excesso de menções, convites de membros comuns e verificação elevada.
 
 **Limites importantes:** o Discord permite que administradores ignorem bloqueios de canal. No `chat-geral`, bloquear anexos e embeds não impede a pessoa de escrever um URL de imagem como texto. Criar o cargo `Membro` não o atribui automaticamente aos próximos participantes: é preciso atribuir manualmente, por Onboarding apropriado ou com um bot online.
@@ -26,22 +26,28 @@ Cria a estrutura básica de um servidor Discord pelo **GitHub Actions**, uma ún
 4. Vá a **Actions → Configurar Wired Paradise → Run workflow** e execute `preview` para ver o plano sem alterar nada.
 5. Se estiver certo, escolha `apply` e digite **APLICAR** no campo `confirmar`. A alteração real só ocorre agora.
 6. Execute `audit` para verificar categorias, canais, cargos, permissões e AutoMod. Este modo usa apenas consultas GET, sem modificar o Discord.
-7. Teste com uma conta normal (não Admin), pois quem tem Administrador pode ignorar restrições: no `chat-geral` enviar texto e tentar um arquivo; no `midias` enviar texto e anexo; nos canais de anúncio/projetos tentar escrever; no `spam` enviar uma mensagem contendo somente `.` e confirmar se foi bloqueada. Verifique os avisos em `logs-de-seguranca`.
+7. Teste com uma conta normal (não Admin), pois quem tem Administrador pode ignorar restrições: no `chat-geral` enviar texto e tentar um arquivo; no `midias` enviar texto e anexo; nos canais de anúncio/projetos tentar escrever; no `spam` enviar uma mensagem de teste com o guardião **desligado** e verificar se o texto é bloqueado; não tente com o guardião de ban ativo. Verifique os avisos em `logs-de-seguranca`.
 8. Retire a permissão de **Administrador** ou remova o bot quando terminar, conforme o uso futuro.
 
 > Se a aba **Actions** não mostrar o fluxo, talvez seja preciso habilitar ações nas configurações do repositório. O fluxo só é executado quando você iniciar manualmente.
 
-## Ban instantâneo pelo ponto (opcional, exige bot online)
+## Armadilha: ban por qualquer mensagem (opcional, exige bot online)
 
-O arquivo `live_bot.py` é um **guardião separado**, implementado mas **NÃO está hospedado nem ativo**. O GitHub Actions não o executa. Ele escuta o evento do AutoMod `WP | Ponto no spam` e só bane se a regra ainda usa a regex do ponto isolado, se o evento veio do `#spam` da categoria COMUNIDADE e se o autor não é o proprietário.
+O `#spam` **não é um chat para conversa**: é uma isca para contas comprometidas que publicam golpes em todos os canais. O tópico avisa os membros honestos para não escreverem lá. **Qualquer publicação aciona ban permanente**, se o guardião estiver online. Isso inclui texto, GIF, imagem, vídeo, arquivo e sticker. O bot **não verifica se a publicação é golpe**; também pode banir um membro legítimo que escrever por engano. A conta dona do servidor é protegida da automação.
 
-Para utilizá-lo no futuro, escolha uma hospedagem confiável que mantenha um processo Python online; instale `discord.py>=2.4,<3`, configure `DISCORD_BOT_TOKEN` como variável **secreta** do host e execute `python live_bot.py`. O bot precisa de **Gerenciar Servidor** (para receber a execução do AutoMod) e **Banir Membros** com hierarquia de cargo suficiente. A alternativa nativa continua funcionando mesmo com o guardião offline: bloqueio e timeout, **sem ban**.
+O arquivo `live_bot.py` **foi implementado, mas não está hospedado e não está ativo**. O GitHub Actions não executa o guardião. Ele usa dois caminhos:
+- AutoMod `WP | Armadilha spam` bloqueia texto e o bot online recebe o evento para banir o autor;
+- Evento de mensagem cobre publicações que o AutoMod não bloqueou, inclusive **anexos sem texto**.
 
-**Não rode o guardião antes de testar o filtro e confirmar que quer banimentos automáticos definitivos.** Um usuário de teste real não deve enviar `.` com o guardião ativo se você não quiser que a conta seja banida. O arquivo foi revisado estaticamente, mas ainda não foi testado em um Discord real.
+Para ativar futuramente, hospede o processo Python continuamente, instale `discord.py>=2.4,<3`, configure `DISCORD_BOT_TOKEN` como **Secret da hospedagem** e execute `python live_bot.py`. O bot precisa de **Gerenciar Servidor**, **Banir Membros** e, para retirar mensagens de webhooks, **Gerenciar Mensagens**. A hierarquia do cargo do bot também importa. Ele não precisa do intent privilegiado Message Content, porque usa somente canal e autor.
+
+**Modo de teste seguro:** configure `WP_DRY_RUN=1` na hospedagem para registrar eventos sem banir. Com `WP_DRY_RUN` desativado, o bot tentará banir permanentemente o autor e solicitar exclusão de até 24 horas de mensagens anteriores dessa conta no servidor. Não faça testes com sua conta alternativa enquanto o ban estiver ativo.
+
+**Limites:** o ban não acontece se o bot cair, estiver desconectado ou não tiver permissão. Uma conta hackeada pode publicar golpes em outros canais **antes** de atingir o spam; por isso, use AutoMod anti-spam, verificação de entrada e limites de anexos/convites em paralelo. Banir a conta comprometida não identifica o invasor.
 
 ## Anti-raid — limites
 
-O AutoMod bloqueia mensagens e registra alertas. O teste `audit` verifica **configurações**, não simula raids, não confirma acesso real de todos os membros e não configura banimento por ponto. O montador é uma execução pontual, sem serviço online 24h. Revise verificação, moderação e segurança diretamente no Discord.
+O AutoMod bloqueia texto e registra alertas. O teste `audit` verifica **configurações**, não simula raids, não confirma acesso real de todos os membros nem verifica se o guardião de ban está hospedado. O montador é uma execução pontual, sem serviço online 24h. Revise verificação, moderação e segurança diretamente no Discord.
 
 O canal `logs-de-seguranca` é um registro privado de alertas: **não é um chat público**. O bot pode adicionar avisos quando regras do AutoMod são acionadas.
 
