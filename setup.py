@@ -397,7 +397,7 @@ def validate_server(api, guild, guild_id):
     dot = next((r for r in rules if r.get("name") == "WP | Ponto no spam"), None)
     spam = next((c for c in channels if c.get("name") == "spam" and c.get("type") == 0), None)
     if not dot or not dot.get("enabled") or dot.get("trigger_type") != 1 or (
-        dot.get("trigger_metadata", {}).get("regex_patterns") != [r"^\\.$"]
+        dot.get("trigger_metadata", {}).get("regex_patterns") != [r"^\.$"]
     ):
         problems.append("Filtro do ponto no spam não está ativo")
     elif not spam:
