@@ -51,7 +51,7 @@ CHANNELS = {
 ROLE_SPECS = (
     ("👑 Dono", 0xED4245, 0, True),
     ("Moderação", 0x3498DB, MANAGE_MESSAGES | MODERATE_MEMBERS, True),
-    ("Membro", 0xFFFFFF, 0, False),
+    ("Member", 0xFFFFFF, 0, False),
     ("Cargo Boost", 0xFF73FA, 0, True),
     ("Sigma 67", 0x9B59B6, 0, True),
 )
@@ -179,6 +179,20 @@ def ensure_roles(api, guild_id, guild, problems):
             print("Cargo de Booster nativo identificado: atribuição automática do Discord.")
             continue
         role = next((r for r in roles if r.get("name") == name), None)
+        # Preserve existing role assignments when migrating to the English name.
+        if name == "Member" and role is None:
+            legacy = next((r for r in roles if r.get("name") == "Membro"
+                           and not r.get("managed")), None)
+            if legacy:
+                try:
+                    api.call("PATCH", "/guilds/" + guild_id + "/roles/" + legacy["id"],
+                             {"name": "Member"})
+                    legacy["name"] = "Member"
+                    role = legacy
+                    print("Cargo Membro renomeado para Member sem perder atribuições.")
+                except DiscordError as error:
+                    problems.append("Renomear Membro: " + str(error))
+                    continue
         if role is None:
             spec = {
                 "name": name,
@@ -314,17 +328,17 @@ def apply_automod(api, guild_id, channels, problems):
 
 def post_role_guide(api, channel_id, boost_native, problems):
     lines = [
-        "**CARGOS DO WIREDPARADISE**",
-        "👑 **Dono** — vermelho, exclusivo do proprietário.",
-        "🔵 **Moderação** — azul, gerencia mensagens e pode aplicar timeout.",
-        "⚪ **Membro** — branco, cargo comum.",
-        "💗 **Cargo Boost** — para quem impulsiona o servidor.",
-        "🟣 **Sigma 67** — exclusivo do dono.",
+        "**WIRED PARADISE ROLES**",
+        "👑 **Dono** — owner only.",
+        "🔵 **Moderação** — moderators.",
+        "⚪ **Member** — automatically assigned to new members via Loritta AutoRole.",
+        "💗 **Cargo Boost** — server boosters.",
+        "🟣 **Sigma 67** — owner only.",
         "",
-        "Os cargos Membro e Moderação são atribuídos pela equipe, não por esta mensagem.",
+        "Choose platform and notification roles during Discord Onboarding. Loritta AutoRole assigns Member.",
     ]
     if not boost_native:
-        lines.append("O Cargo Boost personalizado ainda precisa de atribuição pela equipe.")
+        lines.append("Custom Cargo Boost still requires manual assignment.")
     try:
         api.call("POST", "/channels/" + channel_id + "/messages", {"content": "\n".join(lines),
                                                                  "allowed_mentions": {"parse": []}})
