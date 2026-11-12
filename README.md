@@ -65,3 +65,72 @@ O canal `logs-de-seguranca` é um registro privado de alertas: **não é um chat
 O bot precisa ter as permissões necessárias para administrar categorias, cargos, AutoMod e configurações; Administrador **somente temporariamente**. O código não faz vigilância contínua.
 
 **Importante:** não cole o token no campo `confirmar`. Nele vai só a palavra `APLICAR`.
+
+
+## English member roles + Loritta commands (Nov 2026)
+
+The server is **Wired Paradise**. The old `Membro` role will be renamed
+**Member** without removing it from existing users. This keeps old assignments.
+All **new prompts and role names** are in English; older channels keep their
+current names and permissions. Nothing in the join-role workflow deletes
+channels, messages or other roles.
+
+**Member is NOT assigned to future joins by GitHub Actions.** GitHub Actions
+is a one-time setup, not a persistent Discord bot. Use **Loritta AutoRole**:
+
+1. Open [Loritta's official dashboard](https://loritta.website/dashboard)
+   and authorize adding Loritta to Wired Paradise. Discord will ask you
+   to approve access (this cannot be done by this GitHub repository).
+2. In Discord > **Server Settings > Roles**, place Loritta's highest role
+   **above Member**, but **below Owner/Moderation**. Grant **Manage Roles**,
+   but avoid Administrator unless absolutely necessary.
+3. In Loritta's dashboard, enable **Auto Role / Autorole**, choose **Member**,
+   set the delay to **0** and disable "only when user sends a message" if
+   available. Save.
+4. Loritta's slash commands are available after you authorize the app with
+   its command permissions. Configure which commands are available under
+   Discord > **Server Settings > Integrations > Loritta**.
+5. Test by joining with a normal account (not the server owner's account),
+   and check the Member role is granted automatically.
+
+The separate `join_roles.py` script handles English **Discord-native
+Community Onboarding questions**. These prompts are not Loritta commands.
+
+| Onboarding question | Options | Role behavior |
+| --- | --- | --- |
+| How do you identify? | Male / Female / Prefer not to say | Male or Female adds that role; privacy option adds **no gender role** |
+| What do you play on? | PC / Mobile / Console | Multiple selections allowed, each adds its matching role |
+| Would you like notifications? | Yes, notify me / No, thanks | Yes adds Notifications; No adds **no notification role** |
+
+Questions are optional. People can skip questions instead of disclosing
+personal details. The privacy/no-notification options use a normal public
+text channel as an onboarding selection target, without adding a role.
+Use `@Notifications` for optional announcements instead of `@everyone`.
+
+### Run the new workflow on iPhone
+
+1. Open **Actions > Join Roles and Onboarding (Wired Paradise)**.
+2. Run **preview** to inspect the changes without modifying anything.
+3. Run **apply**, enter `APLICAR` as confirmation. This only adds/renames
+   the requested roles and configures the three English onboarding questions.
+4. Run **audit** to verify the onboarding questions are active.
+5. From Discord, open **Server Settings > Onboarding** and use **Preview**
+   to test the actual newcomer experience.
+
+If the server does not have **Community** enabled, the workflow creates
+the roles but cannot activate Onboarding. Enable Community from Discord.
+Discord also requires **at least seven default channels**, of which **five
+must allow @everyone to send messages**, to enable Onboarding. The workflow
+**will not** create unwanted channels or turn the `#spam` trap into a
+writable welcome channel. It retains existing default channel settings and
+stages the questions if requirements are not met. After configuring
+suitable default channels in the Discord interface, rerun `apply`.
+
+Existing security / anti-spam rules and `live_bot.py` are kept separate
+from Loritta. The guard bot remains **not hosted**, and the `#spam` ban
+trap is **not** made active by installing Loritta.
+
+**Security:** never share Discord tokens or put them in GitHub files.
+Continue using the existing `DISCORD_BOT_TOKEN` and `DISCORD_GUILD_ID`
+repository secrets, and consider making this repository private.
+
