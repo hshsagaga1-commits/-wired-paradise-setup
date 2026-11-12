@@ -195,7 +195,7 @@ def can_everyone_send(channel, guild_id, everyone_permissions):
         return False
     bits = everyone_permissions
     override = next((o for o in channel.get("permission_overwrites", [])
-                     if str(o.get("id")) == guild_id and o.get("type") == 0), None)
+                     if str(o.get("id")) == guild_id and int(o.get("type", 0)) == 0), None)
     if override:
         bits = (bits & ~int(override.get("deny", "0"))) | int(override.get("allow", "0"))
     return (bits & (VIEW | SEND)) == (VIEW | SEND)
@@ -206,7 +206,7 @@ def can_everyone_view(channel, guild_id, everyone_permissions):
         return False
     bits = everyone_permissions
     override = next((o for o in channel.get("permission_overwrites", [])
-                     if str(o.get("id")) == guild_id and o.get("type") == 0), None)
+                     if str(o.get("id")) == guild_id and int(o.get("type", 0)) == 0), None)
     if override:
         bits = (bits & ~int(override.get("deny", "0"))) | int(override.get("allow", "0"))
     return bool(bits & VIEW)
