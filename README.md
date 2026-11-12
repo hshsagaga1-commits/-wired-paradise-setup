@@ -67,70 +67,81 @@ O bot precisa ter as permissões necessárias para administrar categorias, cargo
 **Importante:** não cole o token no campo `confirmar`. Nele vai só a palavra `APLICAR`.
 
 
-## English member roles + Loritta commands (Nov 2026)
+## English welcome, onboarding and Loritta (Nov 2026)
 
-The server is **Wired Paradise**. The old `Membro` role will be renamed
-**Member** without removing it from existing users. This keeps old assignments.
-All **new prompts and role names** are in English; older channels keep their
-current names and permissions. Nothing in the join-role workflow deletes
-channels, messages or other roles.
+### Critical: choose APPLY, not preview
 
-**Member is NOT assigned to future joins by GitHub Actions.** GitHub Actions
-is a one-time setup, not a persistent Discord bot. Use **Loritta AutoRole**:
+The Nov 12 workflow run was in **preview** mode even though the
+confirmation said APLICAR. The log printed "PREVIEW ONLY: no Discord changes"
+and "Community enabled: False". So the choices and auto-role were not active.
 
-1. Open [Loritta's official dashboard](https://loritta.website/dashboard)
-   and authorize adding Loritta to Wired Paradise. Discord will ask you
-   to approve access (this cannot be done by this GitHub repository).
-2. In Discord > **Server Settings > Roles**, place Loritta's highest role
-   **above Member**, but **below Owner/Moderation**. Grant **Manage Roles**,
-   but avoid Administrator unless absolutely necessary.
-3. In Loritta's dashboard, enable **Auto Role / Autorole**, choose **Member**,
-   set the delay to **0** and disable "only when user sends a message" if
-   available. Save.
-4. Loritta's slash commands are available after you authorize the app with
-   its command permissions. Configure which commands are available under
-   Discord > **Server Settings > Integrations > Loritta**.
-5. Test by joining with a normal account (not the server owner's account),
-   and check the Member role is granted automatically.
+To actually change Discord, open [Join Roles and Onboarding](https://github.com/hshsagaga1-commits/-wired-paradise-setup/actions/workflows/join-roles.yml),
+choose **modo = apply**, enter **confirmar = APLICAR**, and press
+Run workflow. Both fields must match. Afterward, run **modo = audit**;
+audit is read-only and will fail if Community, roles, questions or
+welcome notifications are not configured. The setup workflow is one-shot:
+it has no 24/7 background runtime.
 
-The separate `join_roles.py` script handles English **Discord-native
-Community Onboarding questions**. These prompts are not Loritta commands.
+### What apply changes
 
-| Onboarding question | Options | Role behavior |
-| --- | --- | --- |
-| How do you identify? | Male / Female / Prefer not to say | Male or Female adds that role; privacy option adds **no gender role** |
-| What do you play on? | PC / Mobile / Console | Multiple selections allowed, each adds its matching role |
-| Would you like notifications? | Yes, notify me / No, thanks | Yes adds Notifications; No adds **no notification role** |
+- Renames **Membro** to **Member**, preserving its existing assignments.
+- Creates **Male, Female, PC, Mobile, Console, Notifications** roles.
+- Creates a **WELCOME** category with **#welcome** and **#rules**,
+  plus useful public channels **#introductions, #gaming-chat, #off-topic**.
+- Enables native **Discord system join messages** in #welcome. These are
+  automatic without a bot, but are not customizable, guaranteed pings.
+- Enables **Discord Community**, if required and if the setup bot has
+  Administrator permission. Uses #rules and the existing private
+  #logs-de-seguranca channel as Community setup requirements.
+  This does NOT enable public Server Discovery.
+- Configures 7 useful default channels with 5 writable channels, and
+  activates the English Onboarding questions. The #spam trap and
+  private channels are NEVER included in the default channels.
+- Updates the AutoMod spam-trap exemptions to cover new channels.
 
-Questions are optional. People can skip questions instead of disclosing
-personal details. The privacy/no-notification options use a normal public
-text channel as an onboarding selection target, without adding a role.
-Use `@Notifications` for optional announcements instead of `@everyone`.
+These questions appear during Community Onboarding:
+- **How do you identify?** Male / Female / Prefer not to say.
+- **What do you play on?** PC / Mobile / Console (multiple allowed).
+- **Would you like notifications?** Yes, notify me / No, thanks.
 
-### Run the new workflow on iPhone
+All questions are optional. Prefer not to say assigns no gender role;
+No, thanks assigns no notifications role. Existing prompts unrelated to
+these titles are preserved. Check via Server Settings > Onboarding >
+Preview; use a desktop browser view on iPhone if mobile settings hide it.
 
-1. Open **Actions > Join Roles and Onboarding (Wired Paradise)**.
-2. Run **preview** to inspect the changes without modifying anything.
-3. Run **apply**, enter `APLICAR` as confirmation. This only adds/renames
-   the requested roles and configures the three English onboarding questions.
-4. Run **audit** to verify the onboarding questions are active.
-5. From Discord, open **Server Settings > Onboarding** and use **Preview**
-   to test the actual newcomer experience.
+### Automatic Member role requires Loritta
 
-If the server does not have **Community** enabled, the workflow creates
-the roles but cannot activate Onboarding. Enable Community from Discord.
-Discord also requires **at least seven default channels**, of which **five
-must allow @everyone to send messages**, to enable Onboarding. The workflow
-**will not** create unwanted channels or turn the `#spam` trap into a
-writable welcome channel. It retains existing default channel settings and
-stages the questions if requirements are not met. After configuring
-suitable default channels in the Discord interface, rerun `apply`.
+GitHub Actions only configures the server once. It cannot respond to
+member joins after the workflow finishes. Loritta must be invited and
+configured in the [Loritta dashboard](https://loritta.website/dashboard):
 
-Existing security / anti-spam rules and `live_bot.py` are kept separate
-from Loritta. The guard bot remains **not hosted**, and the `#spam` ban
-trap is **not** made active by installing Loritta.
+1. Add Loritta to Wired Paradise via its official dashboard.
+2. Place Loritta's bot role **above Member** under Server Settings > Roles.
+3. Grant **Manage Roles** but not Administrator.
+4. Enable Loritta **AutoRole / Autorole**, set its role to **Member**,
+   turn off any "only after sending a message" condition, use zero delay,
+   and save.
+5. Enable Loritta **Welcome / Mensagens de Boas-Vindas**, choose #welcome
+   as the channel and configure a personalized English message.
+   Choose Loritta's own **mention member variable** from its variable
+   list/picker; variable syntax differs across Discord bots.
+6. #welcome is read-only to ordinary users. Add an explicit channel
+   permission overwrite allowing the Loritta bot role View Channel,
+   Send Messages and Read Message History.
+7. Test with a normal account. If it works, optionally disable native
+   Discord system join notifications to avoid duplicate welcomes.
 
-**Security:** never share Discord tokens or put them in GitHub files.
-Continue using the existing `DISCORD_BOT_TOKEN` and `DISCORD_GUILD_ID`
-repository secrets, and consider making this repository private.
+**Suggested English custom welcome message**:
 
+> Welcome to Wired Paradise! Please read #rules, pick your roles using
+> Channels & Roles, and introduce yourself in #introductions.
+
+Insert the bot's member mention at the beginning of that message via its
+variable picker, then use its built-in preview/test if available.
+
+Native Discord join messages will appear in #welcome even if Loritta
+is not installed, but explicit personalized mentions and new-member
+auto-role require Loritta to be online and configured.
+
+This action does not start or host the optional live_bot.py security
+guardian, and never removes security rules or disables the #spam trap.
