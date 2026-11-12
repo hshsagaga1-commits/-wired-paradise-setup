@@ -120,6 +120,11 @@ def build_prompts(existing, roles, neutral_channel):
             prompts[prompts.index(old)] = spec
         else:
             prompts.append(spec)
+    # Discord requires an ID even for newly-created prompts. discord.py
+    # sends the prompt's position as a temporary ID for creation.
+    for index, prompt in enumerate(prompts):
+        if not prompt.get("id"):
+            prompt["id"] = str(index)
     return prompts
 
 
@@ -344,17 +349,26 @@ def enable_community_if_needed(api, guild_id, guild, rules_id, updates_id):
 
 
 def set_native_welcome(api, guild_id, guild, welcome_id):
-    # Discord sends native system join messages. A user-specific custom ping
-    # still requires a real-time bot like Loritta with Greetings configured.
+    """Configure native join notifications separately from Onboarding itself."""
+    # Discord sends native system join messages. A custom ping requires Loritta.
     old_flags = int(guild.get("system_channel_flags") or 0)
-    patch = {
-        "system_channel_id": welcome_id,
-        "system_channel_flags": old_flags & ~1,  # Unsuppress join notifications
-    }
-    updated = api.call("PATCH", f"/guilds/{guild_id}", patch)
-    if updated.get("system_channel_id") != welcome_id or \
-            int(updated.get("system_channel_flags", 0)) & 1:
-        raise DiscordError("Discord did not confirm system #welcome notifications.")
+    print("Configuring native #welcome channel.")
+    try:
+        updated = api.call("PATCH", f"/guilds/{guild_id}",
+                           {"system_channel_id": welcome_id})
+    except DiscordError as error:
+        raise DiscordError("Setting native welcome channel failed: " + str(error)) from None
+    if str(updated.get("system_channel_id")) != str(welcome_id):
+        raise DiscordError("Discord did not accept #welcome as system channel.")
+    if int(updated.get("system_channel_flags") or 0) & 1:
+        print("Enabling native join notifications.")
+        try:
+            updated = api.call("PATCH", f"/guilds/{guild_id}",
+                               {"system_channel_flags": old_flags & ~1})
+        except DiscordError as error:
+            raise DiscordError("Unsuppressing native join notices failed: " + str(error)) from None
+    if int(updated.get("system_channel_flags") or 0) & 1:
+        raise DiscordError("Discord still suppresses native join notifications.")
     print("Native Discord join messages enabled in #welcome.")
     return updated
 
@@ -428,7 +442,16 @@ def main():
                                "run the original setup workflow apply first.")
         guild = enable_community_if_needed(api, guild_id, guild, made["rules"]["id"],
                                             updates["id"])
-        guild = set_native_welcome(api, guild_id, guild, made["welcome"]["id"])
+        # A failing system-channel patch must not block the more important
+        # Community Onboarding. Report partial success accurately at the end.
+        native_welcome_error = None
+        try:
+            guild = set_native_welcome(api, guild_id, guild, made["welcome"]["id"])
+        except DiscordError as error:
+            native_welcome_error = str(error)
+            print("WARNING: Discord native welcome setup failed. Continuing to Onboarding.")
+            print("DETAIL:", native_welcome_error[:550])
+        print("Reading current Discord Onboarding configuration.")
         onboarding = api.call("GET", f"/guilds/{guild_id}/onboarding")
         defaults = select_default_channels(channels, guild_id, everybody_permissions)
         desired = build_prompts(onboarding.get("prompts", []), roles, made["welcome"]["id"])
@@ -438,12 +461,18 @@ def main():
             "enabled": True,
             "mode": 1,
         }
+        print("Publishing English Onboarding questions and default channels.")
         api.call("PUT", f"/guilds/{guild_id}/onboarding", payload)
         actual = api.call("GET", f"/guilds/{guild_id}/onboarding")
         if not actual.get("enabled"):
             raise DiscordError("Onboarding still disabled after apply.")
         check_prompts(actual.get("prompts", []), desired)
         print("SUCCESS: English join questions enabled and role mappings verified.")
+        if native_welcome_error:
+            print("PARTIAL SUCCESS: Onboarding is configured, but native welcome failed.")
+            print("Set native welcome in Discord Server Settings > Overview, or configure Loritta Greetings.")
+            raise DiscordError("Onboarding enabled, but native welcome remains unresolved: " +
+                               native_welcome_error[:500])
         print("SUCCESS: Discord native welcome messages set to #welcome.")
         print("Loritta AutoRole and custom @mention greetings MUST still be configured")
         print("from the Loritta dashboard. GitHub Actions does not run a 24/7 join bot.")
