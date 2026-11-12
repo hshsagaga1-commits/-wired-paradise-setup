@@ -61,6 +61,26 @@ class DiscordError(Exception):
     pass
 
 
+def api_validation_details(errors, prefix="", depth=0):
+    """Flatten Discord validation paths without dumping request bodies or secrets."""
+    if not isinstance(errors, dict) or depth > 8:
+        return []
+    found = []
+    for name, detail in errors.items():
+        if name == "_errors" and isinstance(detail, list):
+            for item in detail[:3]:
+                if isinstance(item, dict):
+                    code = str(item.get("code", ""))[:40]
+                    message = str(item.get("message", ""))[:140]
+                    found.append("%s: %s %s" % (prefix or "body", code, message))
+            continue
+        child = name if not prefix else prefix + "." + name
+        found.extend(api_validation_details(detail, child, depth + 1))
+        if len(found) >= 6:
+            break
+    return found[:6]
+
+
 class API:
     def __init__(self, token):
         self.token = token
@@ -91,9 +111,11 @@ class API:
                 if error.code >= 500 and attempt < 4:
                     time.sleep(attempt + 1)
                     continue
-                raise DiscordError(
-                    "Discord HTTP %s: %s" % (error.code, str(info.get("message", "Erro de API"))[:160])
-                ) from None
+                detail = "; ".join(api_validation_details(info.get("errors", {})))[:480]
+                summary = str(info.get("message", "Erro de API"))[:160]
+                if detail:
+                    summary += " | " + detail
+                raise DiscordError("Discord HTTP %s: %s" % (error.code, summary)) from None
             except URLError:
                 if attempt < 4:
                     time.sleep(attempt + 1)
