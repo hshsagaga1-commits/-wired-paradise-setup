@@ -135,11 +135,6 @@ def onboarding_ready(default_ids, channels, everyone_permissions):
         if not c or c.get("type") not in (0, 5, 15):
             continue
         p = everyone_permissions
-        for overwrite in c.get("permission_overwrites", []):
-            if str(overwrite.get("id")) == str(c.get("guild_id", "")):
-                # Some responses do not include guild_id; handled by caller's
-                # guild_id parameter below when available.
-                pass
         # Count only channels with explicit @everyone send permission, or where
         # the base @everyone role permits sending and no everyone deny exists.
         everyone = next((r for r in c.get("permission_overwrites", [])
