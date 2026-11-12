@@ -1,0 +1,48 @@
+name: Join Roles and Onboarding (Wired Paradise)
+
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: 'Preview is read-only; apply creates roles and questions; audit verifies'
+        type: choice
+        required: true
+        default: preview
+        options: [preview, apply, audit]
+      confirmar:
+        description: 'For apply, type APLICAR'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wired-paradise-config
+  cancel-in-progress: false
+
+jobs:
+  onboarding:
+    if: ${{ github.repository == 'hshsagaga1-commits/-wired-paradise-setup' && github.ref == 'refs/heads/main' && github.actor == 'hshsagaga1-commits' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - name: Syntax and unit tests (no Discord writes)
+        run: |
+          python -m py_compile setup.py join_roles.py live_bot.py
+          python -m unittest discover -s tests -v
+      - name: Configure English join roles and onboarding
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          WP_MODE: ${{ inputs.modo }}
+          WP_CONFIRMATION: ${{ inputs.confirmar }}
+        run: python join_roles.py
