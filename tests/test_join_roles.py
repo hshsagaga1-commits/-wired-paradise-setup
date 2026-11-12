@@ -1,7 +1,7 @@
 import unittest
 from join_roles import (QUESTIONS, SELECTABLE_ROLES, authorized_guild, build_prompts,
                         onboarding_ready, permission_overwrites, select_default_channels,
-                        ENTRY_CHANNELS, trap_exempt_channel_ids)
+                        ENTRY_CHANNELS, trap_exempt_channel_ids, set_native_welcome)
 
 
 class JoinRolesTests(unittest.TestCase):
@@ -28,6 +28,33 @@ class JoinRolesTests(unittest.TestCase):
         self.assertEqual(result[2]["options"][0]["role_ids"],
                          [self.roles["Notifications"]["id"]])
         self.assertEqual(result[2]["options"][1]["role_ids"], [])
+
+    def test_new_prompts_have_required_temporary_ids(self):
+        prompts = build_prompts([], self.roles, "123")
+        self.assertEqual([p["id"] for p in prompts], ["0", "1", "2"])
+        self.assertEqual(len({p["id"] for p in prompts}), 3)
+
+    def test_native_welcome_is_configured_in_two_calls(self):
+        class FakeAPI:
+            def __init__(self):
+                self.calls = []
+
+            def call(self, method, path, payload):
+                self.calls.append((method, path, payload))
+                if "system_channel_id" in payload:
+                    return {"system_channel_id": "123", "system_channel_flags": 1}
+                if "system_channel_flags" in payload:
+                    return {"system_channel_id": "123", "system_channel_flags": 0}
+                raise AssertionError("unexpected payload")
+
+        fake = FakeAPI()
+        guild = {"system_channel_flags": 1}
+        updated = set_native_welcome(fake, "999", guild, "123")
+        self.assertEqual(updated["system_channel_id"], "123")
+        self.assertEqual(updated["system_channel_flags"], 0)
+        self.assertEqual(len(fake.calls), 2)
+        self.assertEqual(fake.calls[0][2], {"system_channel_id": "123"})
+        self.assertEqual(fake.calls[1][2], {"system_channel_flags": 0})
 
     def test_existing_other_prompts_and_ids_preserved(self):
         existing = [
