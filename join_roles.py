@@ -142,7 +142,7 @@ def onboarding_ready(default_ids, channels, everyone_permissions):
         if everyone:
             deny, allow = int(everyone.get("deny", 0)), int(everyone.get("allow", 0))
             p = (p & ~deny) | allow
-        if p & (1 << 11):
+        if p & (1 << 10) and p & (1 << 11):
             sendable += 1
     return sendable >= 5
 
@@ -204,12 +204,24 @@ def main():
     desired = build_prompts(current.get("prompts", []), selected, neutral)
     if mode == "audit":
         present = {p.get("title"): p for p in current.get("prompts", [])}
-        for title, *_ in QUESTIONS:
-            if title not in present:
+        for expected in desired:
+            title = expected["title"]
+            if title not in {question[0] for question in QUESTIONS}:
+                continue
+            actual = present.get(title)
+            if not actual:
                 raise DiscordError("Missing onboarding question: " + title)
+            for key in ("single_select", "required", "in_onboarding"):
+                if actual.get(key) != expected.get(key):
+                    raise DiscordError("Wrong question settings: " + title)
+            actual_options = {o.get("title"): o for o in actual.get("options", [])}
+            for option in expected["options"]:
+                real = actual_options.get(option["title"])
+                if not real or set(real.get("role_ids", [])) != set(option["role_ids"]):
+                    raise DiscordError("Wrong answer role: " + title + " / " + option["title"])
         if not current.get("enabled"):
             raise DiscordError("Questions staged but onboarding not enabled.")
-        print("AUDIT OK: all join questions exist and onboarding is enabled.")
+        print("AUDIT OK: all join questions and role mappings are active.")
         print("Check Loritta AutoRole separately in its dashboard.")
         return
 
