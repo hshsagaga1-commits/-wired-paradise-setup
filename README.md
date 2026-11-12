@@ -8,14 +8,14 @@ Cria a estrutura básica de um servidor Discord pelo **GitHub Actions**, uma ún
 - **MEUS PROJETOS:** `meus-scripts` e `metodos-de-qualidade` (só proprietário publica).
 - **VOZ:** `Call Geral`.
 - **SEGURANÇA:** `logs-de-seguranca` (alertas do AutoMod, visível para dono e Moderação).
-- **Cargos:** `👑 Dono` (vermelho), `Moderação` (azul), `Membro` (branco), `Cargo Boost` (rosa) e `Sigma 67` (roxo). Dono e Sigma 67 são atribuídos apenas ao proprietário identificado pelo Discord. A coroa aparece no nome; ícone real de cargo depende do recurso `ROLE_ICONS` no servidor.
+- **Cargos:** `👑 Dono` (vermelho), `Moderação` (azul), `Member` (branco), `Cargo Boost` (rosa) e `Sigma 67` (roxo). Dono e Sigma 67 são atribuídos apenas ao proprietário identificado pelo Discord. A coroa aparece no nome; ícone real de cargo depende do recurso `ROLE_ICONS` no servidor.
 - Se existir o cargo **Server Booster nativo**, ele é aproveitado porque o Discord o atribui automaticamente; se não existir, o cargo personalizado Cargo Boost **não é atribuído automaticamente**.
 - **Armadilha no `spam`:** o AutoMod bloqueia **qualquer mensagem com texto**, aplica timeout de 60 segundos e registra alerta. O `live_bot.py`, quando hospedado 24h, também detecta tentativas de texto barradas pelo AutoMod e **qualquer mensagem efetivamente publicada**, inclusive anexos sem texto, para banir permanentemente o autor. O Discord não oferece ban automático direto pelo AutoMod. **Sem bot online, anexos sem texto podem passar e ninguém é banido.**
 - Proteções adicionais contra spam, excesso de menções, convites de membros comuns e verificação elevada.
 
-**Limites importantes:** o Discord permite que administradores ignorem bloqueios de canal. No `chat-geral`, bloquear anexos e embeds não impede a pessoa de escrever um URL de imagem como texto. Criar o cargo `Membro` não o atribui automaticamente aos próximos participantes: é preciso atribuir manualmente, por Onboarding apropriado ou com um bot online.
+**Limites importantes:** o Discord permite que administradores ignorem bloqueios de canal. No `chat-geral`, bloquear anexos e embeds não impede a pessoa de escrever um URL de imagem como texto. Criar o cargo `Member` não o atribui automaticamente aos próximos participantes: configure o módulo AutoRole da Loritta para isso.
 
-**O script não apaga canais, cargos, mensagens ou membros existentes.** Cada aplicação é idempotente para os canais e cargos de mesmo nome nas categorias previstas. O texto informativo do canal `cargos` só é publicado quando esse canal é criado pela primeira vez.
+**O script não apaga canais, cargos, mensagens ou membros existentes.** Cada aplicação é idempotente para os canais e cargos de mesmo nome nas categorias previstas. O texto informativo do canal `cargos` só é publicado quando esse canal é criado pela primeira vez; mensagens antigas não são apagadas ou editadas.
 
 ## Configurar pelo iPhone
 1. No Discord: **Configurações → Avançado → Modo desenvolvedor**, depois copie o **ID do servidor Wired Paradise**. É o ID numérico, não um convite.
