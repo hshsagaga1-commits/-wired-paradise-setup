@@ -253,6 +253,41 @@ def select_default_channels(channels, guild_id, everyone_permissions):
     return selected
 
 
+def trap_exempt_channel_ids(channels, guild_id):
+    """Keep the anti-spam trap scoped ONLY to #spam after new channels exist."""
+    spam = next((c for c in channels if c.get("name") == "spam"
+                 and c.get("type") == 0
+                 and any(cat.get("name") == "COMUNIDADE"
+                         and cat.get("type") == 4
+                         and c.get("parent_id") == cat["id"] for cat in channels)), None)
+    if not spam:
+        raise DiscordError("Cannot find #spam in COMUNIDADE; refusing to change trap.")
+    result = [c["id"] for c in channels
+              if c.get("type") in (0, 5, 11, 12, 15, 16)
+              and c["id"] != spam["id"]]
+    if len(result) > 50:
+        raise DiscordError("More than 50 channels require trap exemptions; "
+                           "do not continue without manual AutoMod review.")
+    return result
+
+
+def update_trap_exemptions(api, guild_id, channels):
+    expected = trap_exempt_channel_ids(channels, guild_id)
+    rules = api.call("GET", f"/guilds/{guild_id}/auto-moderation/rules")
+    trap = next((rule for rule in rules
+                 if rule.get("name") == "WP | Armadilha spam"), None)
+    if not trap:
+        print("WARNING: original AutoMod trap not found; run main setup audit.")
+        return
+    if set(trap.get("exempt_channels", [])) != set(expected):
+        api.call("PATCH",
+                 f"/guilds/{guild_id}/auto-moderation/rules/{trap['id']}",
+                 {"exempt_channels": expected})
+        print("Updated trap exemptions to protect new chat channels.")
+    else:
+        print("Trap exemptions already current.")
+
+
 def enable_community_if_needed(api, guild_id, guild, rules_id, updates_id):
     if "COMMUNITY" in guild.get("features", []):
         print("Community already enabled.")
@@ -354,6 +389,7 @@ def main():
     if mode == "apply":
         roles = ensure_roles(api, guild_id, role_list)
         channels, made = ensure_entry_channels(api, guild_id, channels)
+        update_trap_exemptions(api, guild_id, channels)
         # The private security-log channel is suitable for Community updates.
         updates = next((c for c in channels if c.get("type") == 0
                         and c.get("name") == "logs-de-seguranca"), None)
