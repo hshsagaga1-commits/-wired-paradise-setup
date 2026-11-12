@@ -1,7 +1,7 @@
 import unittest
 from join_roles import (QUESTIONS, SELECTABLE_ROLES, authorized_guild, build_prompts,
                         onboarding_ready, permission_overwrites, select_default_channels,
-                        ENTRY_CHANNELS)
+                        ENTRY_CHANNELS, trap_exempt_channel_ids)
 
 
 class JoinRolesTests(unittest.TestCase):
@@ -97,6 +97,17 @@ class JoinRolesTests(unittest.TestCase):
         self.assertNotIn("7", result)
         self.assertNotIn("8", result)
         self.assertTrue(onboarding_ready(result, channels, (1 << 10)))
+
+    def test_spam_trap_exemptions_include_new_channels(self):
+        category = {"id": "10", "name": "COMUNIDADE", "type": 4}
+        channels = [
+            category,
+            {"id": "11", "name": "spam", "type": 0, "parent_id": "10"},
+            {"id": "12", "name": "welcome", "type": 0, "parent_id": "20"},
+            {"id": "13", "name": "gaming-chat", "type": 0, "parent_id": "10"},
+        ]
+        self.assertEqual(trap_exempt_channel_ids(channels, "999"), ["12", "13"])
+
 
     def test_wrong_guild_rejected(self):
         self.assertFalse(authorized_guild("123"))
