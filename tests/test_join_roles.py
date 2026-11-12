@@ -1,5 +1,7 @@
 import unittest
-from join_roles import QUESTIONS, SELECTABLE_ROLES, authorized_guild, build_prompts, onboarding_ready
+from join_roles import (QUESTIONS, SELECTABLE_ROLES, authorized_guild, build_prompts,
+                        onboarding_ready, permission_overwrites, select_default_channels,
+                        ENTRY_CHANNELS)
 
 
 class JoinRolesTests(unittest.TestCase):
@@ -64,6 +66,37 @@ class JoinRolesTests(unittest.TestCase):
         ]
         self.assertFalse(onboarding_ready([str(i) for i in range(7)],
                                           channels, (1 << 10) | (1 << 11)))
+
+
+    def test_welcome_and_rules_channels_readonly(self):
+        self.assertEqual([item[1] for item in ENTRY_CHANNELS],
+                         ["welcome", "rules", "introductions", "gaming-chat", "off-topic"])
+        read_only = permission_overwrites("999", False)[0]
+        self.assertTrue(int(read_only["allow"]) & (1 << 10))
+        self.assertTrue(int(read_only["deny"]) & (1 << 11))
+        writeable = permission_overwrites("999", True)[0]
+        self.assertTrue(int(writeable["allow"]) & (1 << 11))
+
+    def test_safe_default_selection_excludes_spam_and_logs(self):
+        gid = "999"
+        names = ["welcome", "rules", "chat-geral", "midias",
+                 "introductions", "gaming-chat", "off-topic",
+                 "spam", "logs-de-seguranca"]
+        channels = []
+        for i, name in enumerate(names):
+            can_send = name not in ("welcome", "rules", "spam", "logs-de-seguranca")
+            channels.append({
+                "id": str(i),
+                "name": name,
+                "type": 0,
+                "_guild_id": gid,
+                "permission_overwrites": permission_overwrites(gid, can_send),
+            })
+        result = select_default_channels(channels, gid, (1 << 10))
+        self.assertEqual(len(result), 7)
+        self.assertNotIn("7", result)
+        self.assertNotIn("8", result)
+        self.assertTrue(onboarding_ready(result, channels, (1 << 10)))
 
     def test_wrong_guild_rejected(self):
         self.assertFalse(authorized_guild("123"))
