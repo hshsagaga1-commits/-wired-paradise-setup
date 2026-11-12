@@ -145,3 +145,30 @@ auto-role require Loritta to be online and configured.
 
 This action does not start or host the optional live_bot.py security
 guardian, and never removes security rules or disables the #spam trap.
+
+
+## Limpeza manual do #chat-geral (sem recriar o canal)
+
+O workflow [Limpar chat-geral](https://github.com/hshsagaga1-commits/-wired-paradise-setup/actions/workflows/limpar-chat-geral.yml)
+apaga somente mensagens do canal de texto COMUNIDADE/#chat-geral do servidor
+autorizado. Ele nao remove canais, categorias, cargos ou membros. O canal e
+suas permissoes continuam intactos. O #spam nao e alterado.
+
+1. Abra GitHub Actions > Limpar chat-geral (Wired Paradise) > Run workflow.
+2. Deixe **modo = preview** para contar ate o limite escolhido sem apagar nada.
+3. Para realmente apagar, escolha **modo = apply**, defina o limite de 100,
+   500 ou 2000 mensagens, e escreva **APAGAR CHAT-GERAL** no campo confirmar.
+   Escrever a confirmacao sem selecionar apply nao apaga nada.
+4. Leia o log para conferir quantas mensagens foram removidas. Se houver
+   mais mensagens do que o limite, repita o workflow.
+5. Rode preview novamente para conferir que zerou.
+
+**ATENCAO:** a exclusao e PERMANENTE, inclui mensagens e anexos fixados
+(pins), e NAO pode ser desfeita. Discord permite bulk-delete de 2 a 100
+mensagens por requisicao, somente com menos de 14 dias. Mensagens mais antigas
+sao apagadas individualmente e podem levar tempo. A rotina processa no maximo
+2000 mensagens por execucao.
+
+O bot deve ter permissao para Ver Canal, Ler Historico e Gerenciar Mensagens.
+As credenciais ficam em Actions Secrets. O workflow nao roda automaticamente
+e nao apaga nada a menos que o proprietario escolha apply e confirme.
