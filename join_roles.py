@@ -190,6 +190,35 @@ def ensure_entry_channels(api, guild_id, channels):
     return channels, results
 
 
+def allow_loritta_in_welcome(api, welcome, roles):
+    """If Loritta is already installed, allow its managed role in #welcome."""
+    loritta = next((r for r in roles
+                    if str(r.get("name", "")).lower() == "loritta"
+                    and r.get("managed")), None)
+    if not loritta:
+        print("Loritta role not detected. After inviting it, allow Send Messages in #welcome.")
+        return
+    overwrites = [dict(o) for o in welcome.get("permission_overwrites", [])]
+    existing = next((o for o in overwrites
+                     if str(o.get("id")) == loritta["id"] and int(o.get("type", 0)) == 0), None)
+    if not existing:
+        existing = {"id": loritta["id"], "type": 0, "allow": "0", "deny": "0"}
+        overwrites.append(existing)
+    allow_bits = VIEW | SEND | HISTORY
+    old_allow = int(existing.get("allow", "0"))
+    old_deny = int(existing.get("deny", "0"))
+    new_allow = old_allow | allow_bits
+    new_deny = old_deny & ~allow_bits
+    if new_allow != old_allow or new_deny != old_deny or \
+            overwrites != welcome.get("permission_overwrites", []):
+        existing["allow"] = str(new_allow)
+        existing["deny"] = str(new_deny)
+        api.call("PATCH", f"/channels/{welcome['id']}",
+                 {"permission_overwrites": overwrites})
+        welcome["permission_overwrites"] = overwrites
+        print("Loritta can send custom greetings in #welcome.")
+
+
 def can_everyone_send(channel, guild_id, everyone_permissions):
     if channel.get("type") != 0:
         return False
@@ -389,6 +418,7 @@ def main():
     if mode == "apply":
         roles = ensure_roles(api, guild_id, role_list)
         channels, made = ensure_entry_channels(api, guild_id, channels)
+        allow_loritta_in_welcome(api, made["welcome"], role_list)
         update_trap_exemptions(api, guild_id, channels)
         # The private security-log channel is suitable for Community updates.
         updates = next((c for c in channels if c.get("type") == 0
