@@ -172,3 +172,70 @@ sao apagadas individualmente e podem levar tempo. A rotina processa no maximo
 O bot deve ter permissao para Ver Canal, Ler Historico e Gerenciar Mensagens.
 As credenciais ficam em Actions Secrets. O workflow nao roda automaticamente
 e nao apaga nada a menos que o proprietario escolha apply e confirme.
+
+
+## Somente o dono pode gerenciar bots, AutoMod e automações
+
+**Novo workflow manual**:
+[Somente dono — segurança das automações](https://github.com/hshsagaga1-commits/-wired-paradise-setup/actions/workflows/somente-dono-seguranca.yml)
+
+**O que ele faz:** fiscaliza todas as permissões de cargos *editáveis*
+(incluindo @everyone, Member, Moderação e cargos antigos) e as permissões
+específicas de canais, para impedir que não proprietários recebam:
+
+- Administrator
+- Manage Server (Gerenciar servidor, necessário para alterar AutoMod)
+- Manage Roles
+- Manage Channels
+- Manage Webhooks
+
+A permissão do proprietário real do servidor é automática no Discord;
+ele não perde acesso ao fazer a limpeza. Os cargos gerenciados pelo Discord
+para bots e integrações **não são alterados** (incluindo Loritta). Os
+IDs identificados de bots ficam protegidos das alterações de permissões
+de canal. Direitos de moderadores para Manage Messages, timeout e mensagens
+não são eliminados automaticamente.
+
+### Executar no iPhone
+
+1. No workflow, rode **modo = preview**; o log mostra os nomes dos
+   cargos que ainda têm permissões de configuração perigosas. Nada é alterado.
+2. Se aceitar que também cargos administrativos antigos sejam restringidos,
+   rode **modo = apply** e **confirmar = SOMENTE DONO**.
+3. Rode **modo = audit** para ler e validar tudo novamente sem mudanças.
+
+**Atenção:** "apply" modifica permissões de todos os cargos humanos
+que ainda possuam tais capacidades, incluindo possíveis cargos de
+administração de outros usuários. Isso é intencional para garantir que só
+o proprietário real administre bots e AutoMod. Se bots de terceiros também
+receberam papéis comuns editáveis para acessar funções, revendo antes
+a prévia evita quebrar uma integração. O projeto não modifica as permissões
+das roles gerenciadas por bots.
+
+### Passo complementar importante para Loritta
+
+O script **não acessa o painel privado da Loritta** e não consegue alterar
+automaticamente suas regras internas. O Discord determina que usuários com
+Gerenciar servidor ou Administrador podem gerenciar apps e AutoMod.
+Para comandos individuais da Loritta, navegue em:
+
+Discord -> Configurações do servidor -> Integrações -> Loritta -> Gerenciar
+
+Revise **cada comando de moderação/administração** e permita somente
+o proprietário do servidor; deixe comandos de diversão abertos conforme
+sua preferência. Configure as permissões por comando em Integrações, em
+vez de bloquear todos os comandos da Loritta (isso impediria os membros
+de usar comandos normais). Não se esqueça de revisar o painel da Loritta
+para permissões próprias de administração delegada, se houver.
+
+A API de permissões de comandos requer OAuth de usuário com escopo
+applications.commands.permissions.update; **um token de bot do GitHub não
+é suficiente para editar essas permissões**, portanto este workflow não
+afirma que elas foram modificadas.
+
+Se conceder novamente Gerenciar servidor ou Administrador a qualquer
+outro cargo no futuro, repita o audit para ver se a restrição foi perdida.
+
+Referências:
+- Discord AutoMod FAQ: https://support.discord.com/hc/pt-br/articles/4421269296535-FAQ-do-AutoMod
+- Discord Application Commands: https://docs.discord.com/developers/docs/interactions/slash-commands
