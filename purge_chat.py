@@ -89,9 +89,9 @@ def preview(api, channel_id, cap, now=None):
             break
         total += len(page)
         pinned += sum(bool(m.get("pinned")) for m in page)
-        b, s = split_batch(page, now)
-        recent += len(b)
-        old += len(s)
+        cutoff = now - timedelta(days=14) + BULK_SAFETY_MARGIN
+        recent += sum(message_datetime(m["id"]) > cutoff for m in page)
+        old += sum(message_datetime(m["id"]) <= cutoff for m in page)
         before = page[-1]["id"]
         if len(page) < min(100, cap - (total - len(page))):
             ended = True
@@ -177,7 +177,7 @@ def main():
         sys.exit("Invalid mode: choose preview or apply.")
     if mode == "apply" and confirm != CONFIRMATION:
         sys.exit("No deletion: choose apply AND enter APAGAR CHAT-GERAL.")
-    if cap_str not in ("100", "500", "2000"):
+    if cap_str not in ("100", "500", "2000") or int(cap_str) > MAX_ALLOWED:
         sys.exit("Invalid limit: choose 100, 500 or 2000.")
     if not token or not authorized(guild_id):
         sys.exit("Missing token or unauthorized server. No deletion.")
