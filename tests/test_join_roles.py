@@ -50,9 +50,9 @@ class JoinRolesTests(unittest.TestCase):
             for i in range(7)
         ]
         self.assertTrue(onboarding_ready([str(i) for i in range(7)],
-                                         channels, 1 << 11))
+                                         channels, (1 << 10) | (1 << 11)))
         self.assertFalse(onboarding_ready([str(i) for i in range(6)],
-                                          channels, 1 << 11))
+                                          channels, (1 << 10) | (1 << 11)))
         channels[0]["permission_overwrites"] = [
             {"id": gid, "deny": str(1 << 11), "allow": "0"}
         ]
@@ -63,7 +63,7 @@ class JoinRolesTests(unittest.TestCase):
             {"id": gid, "deny": str(1 << 11), "allow": "0"}
         ]
         self.assertFalse(onboarding_ready([str(i) for i in range(7)],
-                                          channels, 1 << 11))
+                                          channels, (1 << 10) | (1 << 11)))
 
     def test_wrong_guild_rejected(self):
         self.assertFalse(authorized_guild("123"))
